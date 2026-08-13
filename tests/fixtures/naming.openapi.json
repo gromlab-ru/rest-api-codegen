@@ -1,0 +1,71 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Naming Contract", "version": "1.0.0" },
+  "paths": {
+    "/reserved/class": {
+      "get": {
+        "operationId": "class",
+        "tags": ["constructor"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/reserved/await": {
+      "get": {
+        "operationId": "await",
+        "tags": ["toString"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/reserved/return": {
+      "get": {
+        "operationId": "return",
+        "tags": ["constructor"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/reserved/arguments": {
+      "get": {
+        "operationId": "arguments",
+        "tags": ["hasOwnProperty"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/reserved/eval": {
+      "get": {
+        "operationId": "eval",
+        "tags": ["safe"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/collisions/one": {
+      "get": {
+        "operationId": "same-name",
+        "tags": ["collisions"],
+        "responses": { "200": { "description": "Money", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/$Money" } } } } }
+      }
+    },
+    "/collisions/two": {
+      "get": {
+        "operationId": "same_name",
+        "tags": ["collisions"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    },
+    "/unicode/пример": {
+      "get": {
+        "operationId": "получить-данные",
+        "tags": ["данные"],
+        "responses": { "204": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "$Money": {
+        "type": "object",
+        "required": ["amount"],
+        "properties": { "amount": { "type": "number" } }
+      }
+    }
+  }
+}

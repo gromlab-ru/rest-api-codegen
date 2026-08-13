@@ -1,0 +1,25 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Fallback names", "version": "1.0.0" },
+  "servers": [{}],
+  "paths": {
+    "/": {
+      "get": {
+        "responses": { "204": { "description": "Root" } }
+      }
+    },
+    "/widgets/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "204": { "description": "Deleted" } }
+      }
+    }
+  }
+}

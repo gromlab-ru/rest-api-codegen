@@ -37,3 +37,7 @@ type <%~ config.Ts.CodeGenKeyword.UtilRequiredKeys %><T, K extends keyof T> = Om
 
 
 <% } %>
+
+<% if (!modelTypes.some((contract) => !contract.internal)) { %>
+export {};
+<% } %>

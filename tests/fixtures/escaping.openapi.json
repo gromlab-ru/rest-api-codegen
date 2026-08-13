@@ -1,0 +1,39 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Escaping Contract", "version": "1.0.0" },
+  "servers": [
+    { "url": "https://escape.example/\";globalThis.__baseUrlInjection=true;//${value}" }
+  ],
+  "paths": {
+    "/literal-`-${globalThis.__pathInjection=true}": {
+      "get": {
+        "operationId": "SecurityController_probe",
+        "summary": "Escape */ globalThis.__commentInjection=true /*",
+        "tags": ["security*/tag"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Escaped",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Danger" } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer" }
+    },
+    "schemas": {
+      "DangerKind": {
+        "type": "string",
+        "enum": ["quote\"value", "template${value}", "comment*/value"]
+      },
+      "Danger": {
+        "type": "object",
+        "description": "Schema */ globalThis.__schemaInjection=true /*",
+        "properties": { "kind": { "$ref": "#/components/schemas/DangerKind" } }
+      }
+    }
+  }
+}

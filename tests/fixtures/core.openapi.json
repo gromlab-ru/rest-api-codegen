@@ -1,0 +1,228 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "REST API Codegen Contract",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://contract.example/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/__rac_selected_route_6a91/pets/{id}": {
+      "get": {
+        "operationId": "PetsController_getPet",
+        "tags": ["pets"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "verbose",
+            "in": "query",
+            "schema": { "type": "boolean" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pet",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblem" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/__rac_excluded_users_route_8b42/pets": {
+      "post": {
+        "operationId": "PetsController_createPet",
+        "tags": ["pets"],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreatePet" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created pet",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Pet" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/__rac_excluded_admin_route_c7d3/admin/pets": {
+      "get": {
+        "operationId": "AdminController_listPets",
+        "tags": ["admin"],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Pet" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notes/{id}": {
+      "get": {
+        "operationId": "NotesController_readNote",
+        "tags": ["notes"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Note",
+            "content": {
+              "text/plain": {
+                "schema": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/files": {
+      "post": {
+        "operationId": "FilesController_uploadFile",
+        "tags": ["files"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": { "$ref": "#/components/schemas/FileUpload" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Image",
+            "content": {
+              "image/png": {
+                "schema": { "type": "string", "format": "binary" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/forms": {
+      "post": {
+        "operationId": "FormsController_submitForm",
+        "tags": ["forms"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": { "$ref": "#/components/schemas/FormPayload" }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "Submitted" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "PetStatus": {
+        "type": "string",
+        "enum": ["active", "archived"]
+      },
+      "Pet": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/PetStatus" },
+          "description": { "type": "string", "nullable": true }
+        }
+      },
+      "CreatePet": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "$ref": "#/components/schemas/PetStatus" }
+        }
+      },
+      "ApiProblem": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string" }
+        }
+      },
+      "FileUpload": {
+        "type": "object",
+        "required": ["file"],
+        "properties": {
+          "file": { "type": "string", "format": "binary" },
+          "metadata": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "FormPayload": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "enabled": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

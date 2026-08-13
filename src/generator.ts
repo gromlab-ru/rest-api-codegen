@@ -6,8 +6,8 @@ import {
   type ParsedRoute,
 } from 'swagger-typescript-api';
 import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GeneratorConfig } from './config.js';
 import { readTextFile, writeFileWithDirs } from './utils/file.js';
@@ -30,6 +30,11 @@ type OperationFileInfo = {
 type OperationTreeGroup = {
   moduleName: string;
   operations: OperationFileInfo[];
+};
+
+type PreparedSpecification = {
+  spec: Record<string, unknown>;
+  restoreTags: (configuration: GenerateApiConfiguration) => void;
 };
 
 const DEFAULT_BASE_URL_DECLARATION = "public baseUrl = '';";
@@ -72,6 +77,9 @@ const RESERVED_IDENTIFIERS = new Set([
   'while',
   'with',
   'yield',
+  'await',
+  'arguments',
+  'eval',
   'let',
   'static',
   'implements',
@@ -81,6 +89,9 @@ const RESERVED_IDENTIFIERS = new Set([
   'protected',
   'public',
 ]);
+
+const PROTOTYPE_PROPERTY_NAMES = new Set(Object.getOwnPropertyNames(Object.prototype));
+const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -183,7 +194,7 @@ function createOperationFiles(routes: ParsedRoute[]): OperationFileInfo[] {
 function createDataContractsImport(content: string, modelTypes: ModelType[]): string {
   const importedNames = modelTypes
     .map(({ name }) => name)
-    .filter((name) => new RegExp(`\\b${escapeRegExp(name)}\\b`).test(content))
+    .filter((name) => new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(name)}(?![A-Za-z0-9_$])`, 'm').test(content))
     .sort((a, b) => a.localeCompare(b));
 
   if (!importedNames.length) {
@@ -299,15 +310,95 @@ async function writeFormattedFile(
   await writeFileWithDirs(filePath, formattedContent);
 }
 
-async function cleanGeneratedOutput(outputDir: string): Promise<void> {
-  await Promise.all([
-    rm(join(outputDir, 'operations'), { recursive: true, force: true }),
-    rm(join(outputDir, 'index.ts'), { force: true }),
-    rm(join(outputDir, 'http-client.ts'), { force: true }),
-    rm(join(outputDir, 'data-contracts.ts'), { force: true }),
-    rm(join(outputDir, 'create-api-client.ts'), { force: true }),
-    rm(join(outputDir, 'operations-tree.ts'), { force: true }),
-  ]);
+async function replaceGeneratedOutput(outputDir: string, stagingDir: string): Promise<void> {
+  const outputParent = dirname(outputDir);
+  const backupDir = join(outputParent, `.${basename(outputDir)}-backup-${process.pid}-${Date.now()}`);
+  const hasExistingOutput = existsSync(outputDir);
+
+  try {
+    if (hasExistingOutput) {
+      await rename(outputDir, backupDir);
+    }
+
+    await rename(stagingDir, outputDir);
+    await rm(backupDir, { recursive: true, force: true });
+  } catch (error) {
+    if (hasExistingOutput && !existsSync(outputDir) && existsSync(backupDir)) {
+      await rename(backupDir, outputDir);
+    }
+
+    throw error;
+  }
+}
+
+function validateSpecification(spec: Record<string, unknown>): void {
+  if (typeof spec.openapi !== 'string' && typeof spec.swagger !== 'string') {
+    throw new Error('Не указана версия OpenAPI (`openapi`) или Swagger (`swagger`).');
+  }
+
+  if (!spec.info || typeof spec.info !== 'object' || Array.isArray(spec.info)) {
+    throw new Error('OpenAPI спецификация должна содержать объект `info`.');
+  }
+
+  if (!spec.paths || typeof spec.paths !== 'object' || Array.isArray(spec.paths)) {
+    throw new Error('OpenAPI спецификация должна содержать объект `paths`.');
+  }
+}
+
+function prepareSpecification(spec: Record<string, unknown>): PreparedSpecification {
+  const internalToOriginalTag = new Map<string, string>();
+  const originalToInternalTag = new Map<string, string>();
+  const paths = spec.paths as Record<string, unknown>;
+  let tagIndex = 0;
+
+  for (const pathItem of Object.values(paths)) {
+    if (!pathItem || typeof pathItem !== 'object' || Array.isArray(pathItem)) {
+      continue;
+    }
+
+    for (const [method, operation] of Object.entries(pathItem)) {
+      if (!HTTP_METHODS.has(method.toLowerCase()) || !operation || typeof operation !== 'object' || Array.isArray(operation)) {
+        continue;
+      }
+
+      const tags = (operation as { tags?: unknown }).tags;
+      if (!Array.isArray(tags)) {
+        continue;
+      }
+
+      (operation as { tags: unknown[] }).tags = tags.map((tag) => {
+        if (typeof tag !== 'string' || !PROTOTYPE_PROPERTY_NAMES.has(tag)) {
+          return tag;
+        }
+
+        const existingInternalTag = originalToInternalTag.get(tag);
+        if (existingInternalTag) {
+          return existingInternalTag;
+        }
+
+        const internalTag = `restApiCodegenTag${tagIndex++}`;
+        originalToInternalTag.set(tag, internalTag);
+        internalToOriginalTag.set(internalTag, tag);
+        return internalTag;
+      });
+    }
+  }
+
+  return {
+    spec,
+    restoreTags: (configuration) => {
+      for (const group of configuration.routes.combined || []) {
+        const originalTag = internalToOriginalTag.get(group.moduleName);
+        if (originalTag) {
+          group.moduleName = originalTag;
+        }
+
+        for (const route of group.routes || []) {
+          route.raw.tags = (route.raw.tags || []).map((tag) => internalToOriginalTag.get(tag) || tag);
+        }
+      }
+    },
+  };
 }
 
 async function loadSpecification(inputPath: string): Promise<Record<string, unknown>> {
@@ -338,18 +429,22 @@ async function loadSpecification(inputPath: string): Promise<Record<string, unkn
     content = await readTextFile(resolve(inputPath));
   }
 
+  let specification: unknown;
+
   try {
-    const specification = JSON.parse(content) as unknown;
-
-    if (!specification || typeof specification !== 'object' || Array.isArray(specification)) {
-      throw new Error('Корневое значение должно быть JSON-объектом.');
-    }
-
-    return specification as Record<string, unknown>;
+    specification = JSON.parse(content) as unknown;
   } catch (error) {
     const details = error instanceof Error ? error.message : String(error);
     throw new Error(`Не удалось распарсить OpenAPI спецификацию как JSON. Детали: ${details}`);
   }
+
+  if (!specification || typeof specification !== 'object' || Array.isArray(specification)) {
+    throw new Error('OpenAPI спецификация должна быть JSON-объектом.');
+  }
+
+  const spec = specification as Record<string, unknown>;
+  validateSpecification(spec);
+  return spec;
 }
 
 function translateGenerationErrorMessage(message: string): string {
@@ -379,12 +474,13 @@ export async function generate(config: GeneratorConfig): Promise<void> {
     );
   }
 
-  const outputDir = resolve(config.outputPath);
-  const spec = await loadSpecification(config.inputPath);
-
   try {
+    const outputDir = resolve(config.outputPath);
+    const outputParent = dirname(outputDir);
+    const spec = await loadSpecification(config.inputPath);
+    const preparedSpecification = prepareSpecification(spec);
     const generatorOutput = await swaggerGenerateApi({
-      spec,
+      spec: preparedSpecification.spec,
       httpClientType: 'fetch',
       modular: false,
       templates: templatesPath,
@@ -430,79 +526,88 @@ export async function generate(config: GeneratorConfig): Promise<void> {
       output: false,
       fileName: 'index.ts',
     } as Parameters<typeof swaggerGenerateApi>[0]) as unknown as GenerateApiOutput;
+    preparedSpecification.restoreTags(generatorOutput.configuration);
 
-    await cleanGeneratedOutput(outputDir);
+    await mkdir(outputParent, { recursive: true });
+    const stagingDir = await mkdtemp(join(outputParent, `.${basename(outputDir)}-staging-`));
 
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'data-contracts.ts'),
-      await renderTemplateFile(generatorOutput, join(templatesPath, 'data-contracts.ejs'), generatorOutput.configuration),
-    );
-
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'http-client.ts'),
-      await renderHttpClient(templatesPath, spec),
-    );
-
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'create-api-client.ts'),
-      await readTextFile(getEmbeddedClientSourcePath(templatesPath, 'create-api-client.ts')),
-    );
-
-    const operationTemplatePath = join(templatesPath, 'operation.ejs');
-    const operationFiles = createOperationFiles(getAllRoutes(generatorOutput.configuration));
-    const operationExports: string[] = [];
-
-    for (const operationFile of operationFiles) {
-      let operationContent = await renderTemplateFile(generatorOutput, operationTemplatePath, {
-        ...generatorOutput.configuration,
-        route: operationFile.route,
-        operationName: operationFile.operationName,
-      });
-      operationContent = operationContent
-        .replace('__HTTP_CLIENT_IMPORTS__', createHttpClientImport(operationContent))
-        .replace('__DATA_CONTRACT_IMPORTS__', createDataContractsImport(operationContent, generatorOutput.configuration.modelTypes));
+    try {
+      await writeFormattedFile(
+        generatorOutput,
+        join(stagingDir, 'data-contracts.ts'),
+        await renderTemplateFile(generatorOutput, join(templatesPath, 'data-contracts.ejs'), generatorOutput.configuration),
+      );
 
       await writeFormattedFile(
         generatorOutput,
-        join(outputDir, 'operations', `${operationFile.operationFileName}.ts`),
-        operationContent,
+        join(stagingDir, 'http-client.ts'),
+        await renderHttpClient(templatesPath, spec),
       );
 
-      operationExports.push(
-        `export { ${operationFile.operationName} } from "./${operationFile.operationFileName}.js";`,
+      await writeFormattedFile(
+        generatorOutput,
+        join(stagingDir, 'create-api-client.ts'),
+        await readTextFile(getEmbeddedClientSourcePath(templatesPath, 'create-api-client.ts')),
       );
+
+      const operationTemplatePath = join(templatesPath, 'operation.ejs');
+      const operationFiles = createOperationFiles(getAllRoutes(generatorOutput.configuration));
+      const operationExports: string[] = [];
+
+      for (const operationFile of operationFiles) {
+        let operationContent = await renderTemplateFile(generatorOutput, operationTemplatePath, {
+          ...generatorOutput.configuration,
+          route: operationFile.route,
+          operationName: operationFile.operationName,
+        });
+        operationContent = operationContent
+          .replace('__HTTP_CLIENT_IMPORTS__', createHttpClientImport(operationContent))
+          .replace('__DATA_CONTRACT_IMPORTS__', createDataContractsImport(operationContent, generatorOutput.configuration.modelTypes));
+
+        await writeFormattedFile(
+          generatorOutput,
+          join(stagingDir, 'operations', `${operationFile.operationFileName}.ts`),
+          operationContent,
+        );
+
+        operationExports.push(
+          `export { ${operationFile.operationName} } from "./${operationFile.operationFileName}.js";`,
+        );
+      }
+
+      await writeFormattedFile(
+        generatorOutput,
+        join(stagingDir, 'operations', 'index.ts'),
+        operationExports.length ? operationExports.join('\n') : 'export {};',
+      );
+
+      await writeFormattedFile(
+        generatorOutput,
+        join(stagingDir, 'operations-tree.ts'),
+        createOperationTreeContent(generatorOutput.configuration, operationFiles),
+      );
+
+      await writeFormattedFile(
+        generatorOutput,
+        join(stagingDir, 'index.ts'),
+        [
+          'export { createApiClient } from "./create-api-client.js";',
+          'export type { ApiOperation, ApiTree, BoundApi } from "./create-api-client.js";',
+          'export { ApiError, ContentType, HttpClient } from "./http-client.js";',
+          'export type { ApiConfig, ApiRequestClient, CancelToken, ErrorInterceptor, FetchLike, FullRequestParams, HttpResponse, ParamsSerializer, QueryParamsType, RequestContext, RequestInterceptor, RequestParams, ResponseFormat, ResponseInterceptor, ResponseParser } from "./http-client.js";',
+          'export type * from "./data-contracts.js";',
+          'export { operationsTree } from "./operations-tree.js";',
+          'export type { OperationsTree } from "./operations-tree.js";',
+          'export * as operations from "./operations/index.js";',
+          'export * from "./operations/index.js";',
+        ].join('\n'),
+      );
+
+      await replaceGeneratedOutput(outputDir, stagingDir);
+    } catch (error) {
+      await rm(stagingDir, { recursive: true, force: true });
+      throw error;
     }
-
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'operations', 'index.ts'),
-      operationExports.length ? operationExports.join('\n') : 'export {};',
-    );
-
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'operations-tree.ts'),
-      createOperationTreeContent(generatorOutput.configuration, operationFiles),
-    );
-
-    await writeFormattedFile(
-      generatorOutput,
-      join(outputDir, 'index.ts'),
-      [
-        'export { createApiClient } from "./create-api-client.js";',
-        'export type { ApiOperation, ApiTree, BoundApi } from "./create-api-client.js";',
-        'export { ApiError, ContentType, HttpClient } from "./http-client.js";',
-        'export type { ApiConfig, ApiRequestClient, CancelToken, ErrorInterceptor, FetchLike, FullRequestParams, HttpResponse, ParamsSerializer, QueryParamsType, RequestContext, RequestInterceptor, RequestParams, ResponseFormat, ResponseInterceptor, ResponseParser } from "./http-client.js";',
-        'export type * from "./data-contracts.js";',
-        'export { operationsTree } from "./operations-tree.js";',
-        'export type { OperationsTree } from "./operations-tree.js";',
-        'export * as operations from "./operations/index.js";',
-        'export * from "./operations/index.js";',
-      ].join('\n'),
-    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Ошибка генерации: ${translateGenerationErrorMessage(message)}`);

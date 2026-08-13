@@ -32,7 +32,7 @@ export type ResponseInterceptor = <D = unknown, E = unknown>(
   context: RequestContext,
 ) => HttpResponse<D, E> | Promise<HttpResponse<D, E>>;
 
-export type ErrorInterceptor = <TResult = unknown>(
+export type ErrorInterceptor<TResult = unknown> = (
   error: unknown,
   context: RequestContext<TResult>,
 ) => TResult | Promise<TResult>;
@@ -52,7 +52,7 @@ export interface ApiConfig extends Omit<RequestParams, 'baseUrl' | 'cancelToken'
   responseParser?: ResponseParser;
   onRequest?: RequestInterceptor;
   onResponse?: ResponseInterceptor;
-  onError?: ErrorInterceptor;
+  onError?: ErrorInterceptor<any>;
 }
 
 export interface HttpResponse<D extends unknown, E extends unknown = unknown> extends Response {
@@ -92,13 +92,13 @@ export enum ContentType {
 
 export class HttpClient implements ApiRequestClient {
   public baseUrl = '';
-  private abortControllers = new Map<CancelToken, AbortController>();
+  private abortControllers = new Map<CancelToken, Set<AbortController>>();
   private customFetch: FetchLike = (...fetchParams) => fetch(...fetchParams);
   private paramsSerializer?: ParamsSerializer;
   private responseParser?: ResponseParser;
   private onRequest?: RequestInterceptor;
   private onResponse?: ResponseInterceptor;
-  private onError?: ErrorInterceptor;
+  private onError?: ErrorInterceptor<any>;
 
   private baseRequestParams: RequestParams = {
     credentials: 'same-origin',
@@ -141,7 +141,10 @@ export class HttpClient implements ApiRequestClient {
 
   protected addArrayQueryParam(query: QueryParamsType, key: string) {
     const value = query[key];
-    return value.map((v: any) => this.encodeQueryParam(key, v)).join('&');
+    return value
+      .filter((item: unknown) => typeof item !== 'undefined')
+      .map((item: unknown) => this.encodeQueryParam(key, item))
+      .join('&');
   }
 
   protected toQueryString(rawQuery?: QueryParamsType): string {
@@ -158,29 +161,28 @@ export class HttpClient implements ApiRequestClient {
           ? this.addArrayQueryParam(query, key)
           : this.addQueryParam(query, key),
       )
+      .filter(Boolean)
       .join('&');
   }
 
-  protected addQueryParams(rawQuery?: QueryParamsType): string {
-    const queryString = this.toQueryString(rawQuery);
-    return queryString ? `?${queryString}` : '';
-  }
-
   protected buildRequestUrl(baseUrl: string | undefined, path: string, query?: QueryParamsType): string {
-    return `${baseUrl || this.baseUrl || ''}${path}${this.addQueryParams(query)}`;
-  }
+    const url = `${baseUrl ?? this.baseUrl}${path}`;
+    const queryString = this.toQueryString(query);
 
-  protected createRequestContext<TResult>(
-    request: FullRequestParams,
-    retryCount: number,
-    retry: () => Promise<TResult>,
-  ): RequestContext<TResult> {
-    return {
-      url: this.buildRequestUrl(request.baseUrl, request.path, request.query),
-      request,
-      retryCount,
-      retry,
-    };
+    if (!queryString) {
+      return url;
+    }
+
+    const hashIndex = url.indexOf('#');
+    const pathAndQuery = hashIndex === -1 ? url : url.slice(0, hashIndex);
+    const hash = hashIndex === -1 ? '' : url.slice(hashIndex);
+    const separator = pathAndQuery.endsWith('?') || pathAndQuery.endsWith('&')
+      ? ''
+      : pathAndQuery.includes('?')
+        ? '&'
+        : '?';
+
+    return `${pathAndQuery}${separator}${queryString}${hash}`;
   }
 
   protected updateRequestContext<TResult>(context: RequestContext<TResult>, request: FullRequestParams) {
@@ -213,18 +215,25 @@ export class HttpClient implements ApiRequestClient {
     } as T;
   }
 
-  protected createAbortSignal = (cancelToken: CancelToken): AbortSignal | undefined => {
-    if (this.abortControllers.has(cancelToken)) {
-      const abortController = this.abortControllers.get(cancelToken);
-      if (abortController) {
-        return abortController.signal;
-      }
-      return void 0;
-    }
-
+  protected createAbortSignal = (
+    cancelToken: CancelToken,
+  ): { signal: AbortSignal; cleanup: () => void } => {
     const abortController = new AbortController();
-    this.abortControllers.set(cancelToken, abortController);
-    return abortController.signal;
+    const controllers = this.abortControllers.get(cancelToken) ?? new Set<AbortController>();
+    controllers.add(abortController);
+    this.abortControllers.set(cancelToken, controllers);
+
+    return {
+      signal: abortController.signal,
+      cleanup: () => {
+        const activeControllers = this.abortControllers.get(cancelToken);
+        activeControllers?.delete(abortController);
+
+        if (activeControllers?.size === 0) {
+          this.abortControllers.delete(cancelToken);
+        }
+      },
+    };
   };
 
   protected createRequestSignal = (
@@ -233,6 +242,7 @@ export class HttpClient implements ApiRequestClient {
     timeout?: number,
   ): { signal: AbortSignal | null; cleanup: () => void } => {
     const signals: AbortSignal[] = [];
+    const cleanups: Array<() => void> = [];
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     if (signal) {
@@ -240,11 +250,9 @@ export class HttpClient implements ApiRequestClient {
     }
 
     if (typeof cancelToken !== 'undefined') {
-      const cancelSignal = this.createAbortSignal(cancelToken);
-
-      if (cancelSignal) {
-        signals.push(cancelSignal);
-      }
+      const cancelRequest = this.createAbortSignal(cancelToken);
+      signals.push(cancelRequest.signal);
+      cleanups.push(cancelRequest.cleanup);
     }
 
     if (typeof timeout === 'number' && timeout > 0) {
@@ -258,49 +266,58 @@ export class HttpClient implements ApiRequestClient {
         clearTimeout(timeoutId);
       }
     };
+    const cleanupRequest = () => {
+      cleanupTimeout();
+      cleanups.forEach((cleanup) => cleanup());
+    };
 
     if (signals.length === 0) {
-      return { signal: null, cleanup: cleanupTimeout };
+      return { signal: null, cleanup: cleanupRequest };
     }
 
     if (signals.length === 1) {
-      return { signal: signals[0] || null, cleanup: cleanupTimeout };
+      return { signal: signals[0] || null, cleanup: cleanupRequest };
     }
 
     const abortController = new AbortController();
-    const abortRequest = () => abortController.abort();
+    const listeners = new Map<AbortSignal, () => void>();
 
     signals.forEach((signal) => {
+      const abortRequest = () => {
+        if (!abortController.signal.aborted) {
+          abortController.abort(signal.reason);
+        }
+      };
+
       if (signal.aborted) {
-        abortController.abort();
+        abortRequest();
       } else {
         signal.addEventListener('abort', abortRequest, { once: true });
+        listeners.set(signal, abortRequest);
       }
     });
 
     return {
       signal: abortController.signal,
       cleanup: () => {
-        cleanupTimeout();
-        signals.forEach((signal) => signal.removeEventListener('abort', abortRequest));
+        cleanupRequest();
+        listeners.forEach((listener, signal) => signal.removeEventListener('abort', listener));
       },
     };
   };
 
   public abortRequest = (cancelToken: CancelToken) => {
-    const abortController = this.abortControllers.get(cancelToken);
+    const abortControllers = this.abortControllers.get(cancelToken);
 
-    if (abortController) {
-      abortController.abort();
+    if (abortControllers) {
+      abortControllers.forEach((abortController) => abortController.abort());
       this.abortControllers.delete(cancelToken);
     }
   };
 
   private contentFormatters: Record<ContentType, (input: any) => any> = {
-    [ContentType.Json]: (input: any) =>
-      input !== null && (typeof input === 'object' || typeof input === 'string') ? JSON.stringify(input) : input,
-    [ContentType.JsonApi]: (input: any) =>
-      input !== null && (typeof input === 'object' || typeof input === 'string') ? JSON.stringify(input) : input,
+    [ContentType.Json]: (input: any) => input === null ? null : JSON.stringify(input),
+    [ContentType.JsonApi]: (input: any) => input === null ? null : JSON.stringify(input),
     [ContentType.Text]: (input: any) =>
       input !== null && typeof input !== 'string' ? JSON.stringify(input) : input,
     [ContentType.FormData]: (input: any) => {
@@ -338,11 +355,10 @@ export class HttpClient implements ApiRequestClient {
 
     const responseToParse = response.clone();
 
-    await Promise.resolve(
-      this.responseParser
+    await Promise.resolve()
+      .then(() => this.responseParser
         ? this.responseParser(responseToParse, responseFormat)
-        : responseToParse[responseFormat as ResponseFormat](),
-    )
+        : responseToParse[responseFormat as ResponseFormat]())
       .then((data) => {
         if (parsedResponse.ok) {
           parsedResponse.data = data as T;
@@ -369,27 +385,25 @@ export class HttpClient implements ApiRequestClient {
     requestParams: FullRequestParams,
     retryCount: number,
   ): Promise<T> => {
-    let request = this.mergeRequestParams(this.baseRequestParams, requestParams) as FullRequestParams;
-    request.baseUrl = request.baseUrl || this.baseUrl;
-    request.secure = typeof request.secure === 'boolean' ? request.secure : this.baseRequestParams.secure;
-
-    const context = this.createRequestContext<T>(
+    let request = requestParams;
+    const context: RequestContext<T> = {
+      url: '',
       request,
       retryCount,
-      () => this.requestWithRetry<T, E>(requestParams, retryCount + 1),
-    );
-
+      retry: () => this.requestWithRetry<T, E>(requestParams, retryCount + 1),
+    };
     let cleanupSignal = () => {};
-    let cancelToken: CancelToken | undefined;
 
     const cleanupRequest = () => {
       cleanupSignal();
-      if (typeof cancelToken !== 'undefined') {
-        this.abortControllers.delete(cancelToken);
-      }
     };
 
     try {
+      request = this.mergeRequestParams(this.baseRequestParams, requestParams) as FullRequestParams;
+      request.baseUrl = request.baseUrl ?? this.baseUrl;
+      request.secure = typeof request.secure === 'boolean' ? request.secure : this.baseRequestParams.secure;
+      this.updateRequestContext(context, request);
+
       if (this.onRequest) {
         request = await this.onRequest(request, context);
         this.updateRequestContext(context, request);
@@ -408,17 +422,22 @@ export class HttpClient implements ApiRequestClient {
         ...params
       } = request;
 
-      cancelToken = requestCancelToken;
-      const { signal, cleanup } = this.createRequestSignal(params.signal, cancelToken, timeout);
+      const { signal, cleanup } = this.createRequestSignal(params.signal, requestCancelToken, timeout);
       cleanupSignal = cleanup;
 
-      const payloadFormatter = this.contentFormatters[type || ContentType.Json];
+      const effectiveType = type ?? (typeof body !== 'undefined' && body !== null ? ContentType.Json : undefined);
+      const payloadFormatter = this.contentFormatters[effectiveType || ContentType.Json];
+      const headers = new Headers(this.mergeHeaders(params.headers));
+
+      if (effectiveType === ContentType.FormData) {
+        headers.delete('content-type');
+      } else if (effectiveType) {
+        headers.set('content-type', effectiveType);
+      }
+
       const response = await this.customFetch(context.url, {
         ...params,
-        headers: this.mergeHeaders(
-          params.headers,
-          type && type !== ContentType.FormData ? { 'Content-Type': type } : undefined,
-        ),
+        headers: Object.fromEntries(headers.entries()),
         signal,
         body: typeof body === 'undefined' || body === null ? null : payloadFormatter(body),
       });
@@ -426,7 +445,7 @@ export class HttpClient implements ApiRequestClient {
       const parsedResponse = await this.parseResponse<T, E>(response, format);
 
       if (!parsedResponse.ok) {
-        throw new ApiError<E>(parsedResponse, request, parsedResponse.error || parsedResponse.data, parsedResponse.error);
+        throw new ApiError<E>(parsedResponse, request, parsedResponse.error, parsedResponse.error);
       }
 
       const finalResponse = this.onResponse
@@ -435,8 +454,6 @@ export class HttpClient implements ApiRequestClient {
 
       return finalResponse.data;
     } catch (error) {
-      cleanupRequest();
-
       if (this.onError) {
         return this.onError(error, context);
       }

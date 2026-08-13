@@ -1,0 +1,67 @@
+{
+  "name": "@gromlab/rest-api-codegen",
+  "version": "5.2.0",
+  "description": "Generate framework-agnostic TypeScript REST SDKs from OpenAPI specifications",
+  "type": "module",
+  "packageManager": "npm@11.16.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "rest-api-codegen": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.build.json && node scripts/copy-templates.mjs",
+    "clean": "node scripts/clean.mjs",
+    "dev": "npm run build && node dist/cli.js",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "verify": "npm run typecheck && npm run build",
+    "prepack": "npm run verify"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "swagger-typescript-api": "13.12.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5"
+  },
+  "keywords": [
+    "openapi",
+    "swagger",
+    "api",
+    "codegen",
+    "typescript",
+    "generator",
+    "cli"
+  ],
+  "author": "S.Gromov",
+  "license": "MIT",
+  "homepage": "https://github.com/gromlab-ru/rest-api-codegen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gromlab-ru/rest-api-codegen"
+  },
+  "bugs": {
+    "url": "https://github.com/gromlab-ru/rest-api-codegen/issues"
+  }
+}

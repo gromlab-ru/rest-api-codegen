@@ -1,0 +1,44 @@
+import type { ApiRequestClient } from './http-client.js';
+
+export type ApiOperation<TClient extends ApiRequestClient = ApiRequestClient> = (
+  client: TClient,
+  ...args: any[]
+) => any;
+
+export type ApiTree<TClient extends ApiRequestClient = ApiRequestClient> = {
+  readonly [key: string]: ApiOperation<TClient> | ApiTree<TClient>;
+};
+
+export type BoundApi<TTree, TClient extends ApiRequestClient> = {
+  readonly [K in keyof TTree]: TTree[K] extends (
+    client: TClient,
+    ...args: infer Args
+  ) => infer Result
+    ? (...args: Args) => Result
+    : TTree[K] extends ApiTree<TClient>
+      ? BoundApi<TTree[K], TClient>
+      : never;
+};
+
+export const createApiClient = <
+  TClient extends ApiRequestClient,
+  const TTree extends ApiTree<TClient>,
+>(
+  client: TClient,
+  tree: TTree,
+): BoundApi<TTree, TClient> => {
+  const bindNode = (node: ApiOperation<TClient> | ApiTree<TClient>): unknown => {
+    if (typeof node === 'function') {
+      return (...args: unknown[]) => node(client, ...args);
+    }
+
+    return Object.fromEntries(
+      Object.entries(node).map(([key, value]) => [
+        key,
+        bindNode(value as ApiOperation<TClient> | ApiTree<TClient>),
+      ]),
+    );
+  };
+
+  return bindNode(tree) as BoundApi<TTree, TClient>;
+};

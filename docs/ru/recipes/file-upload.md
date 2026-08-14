@@ -6,9 +6,9 @@
 import {
   readNote,
   uploadFile,
-} from "@acme/pet-sdk/operations";
-import type { FileUpload } from "@acme/pet-sdk";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+} from "@acme/pet-store-rest-sdk/operations";
+import type { FileUpload } from "@acme/pet-store-rest-sdk";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export function uploadImage(file: File): Promise<Blob> {
   const payload: FileUpload = {
@@ -16,11 +16,11 @@ export function uploadImage(file: File): Promise<Blob> {
     metadata: { source: "browser" },
   };
 
-  return uploadFile(petHttpClient, payload);
+  return uploadFile(httpClient, payload);
 }
 
 export function loadNote(id: number): Promise<string> {
-  return readNote(petHttpClient, { id });
+  return readNote(httpClient, { id });
 }
 ```
 
@@ -31,15 +31,15 @@ export function loadNote(id: number): Promise<string> {
 Для ручной operation можно сформировать multipart body самостоятельно:
 
 ```ts
-import { ContentType } from "@acme/pet-sdk/http-client";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { ContentType } from "@acme/pet-store-rest-sdk/http-client";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export function uploadRaw(file: File): Promise<Blob> {
   const body = new FormData();
   body.append("file", file);
   body.append("metadata", JSON.stringify({ source: "browser" }));
 
-  return petHttpClient.request<Blob>({
+  return httpClient.request<Blob>({
     path: "/files",
     method: "POST",
     body,
@@ -65,10 +65,10 @@ Object-to-FormData:
 Ручной request может использовать методы Fetch `Body`, например `arrayBuffer`:
 
 ```ts
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export function downloadArchive(): Promise<ArrayBuffer> {
-  return petHttpClient.request<ArrayBuffer>({
+  return httpClient.request<ArrayBuffer>({
     path: "/archive",
     method: "GET",
     format: "arrayBuffer",

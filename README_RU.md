@@ -126,15 +126,14 @@ export const getPetFetcher = (id: string) =>
 
 ## Документация
 
-- [Обзор](./docs/ru/overview.md).
-- [Быстрый старт](./docs/ru/getting-started.md).
-- [CLI](./docs/ru/cli.md).
-- [Generated SDK](./docs/ru/generated-sdk.md).
-- [Композиция API-клиента](./docs/ru/client-composition.md).
-- [`HttpClient`](./docs/ru/http-client.md).
+- [Обзор](./docs/ru/01_overview.md).
+- [Быстрый старт](./docs/ru/03_getting-started.md).
+- [CLI](./docs/ru/04_cli.md).
+- [Generated SDK](./docs/ru/05_generated-sdk.md).
+- [Композиция API-клиента](./docs/ru/08_client-composition.md).
+- [`HttpClient`](./docs/ru/09_http-client.md).
 - [Рецепты](./docs/ru/recipes/index.md).
-- [Архитектура](./docs/ru/architecture.md).
-- [Тестирование](./docs/ru/testing.md).
+- [Разработка и сопровождение](./docs/ru/maintainers/index.md).
 
 ## Важные ограничения
 

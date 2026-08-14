@@ -2,24 +2,26 @@
 
 Hook, lazy module или небольшой adapter часто использует ровно один endpoint. В таком leaf-module operation импортируется напрямую и вызывается с общим configured transport.
 
+Operation может быть generated, ручной или временно исправленной в смешанном сценарии. Форма вызова остаётся одинаковой: transport передаётся первым аргументом.
+
 ## Локальный generated SDK
 
 ```ts
-import { getPet } from "../../infra/pet-api/generated/operations/get-pet.js";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { getPet } from "../../infra/pet-store-api/generated/operations/get-pet.js";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export const getPetFetcher = (id: string) =>
-  getPet(petHttpClient, { id });
+  getPet(httpClient, { id });
 ```
 
 ## SDK-пакет
 
 ```ts
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export const getPetFetcher = (id: string) =>
-  getPet(petHttpClient, { id });
+  getPet(httpClient, { id });
 ```
 
 Package должен экспортировать wildcard `./operations/*`.
@@ -30,9 +32,9 @@ SDK не генерирует hooks, но operation подходит для fetc
 
 ```tsx
 import { useEffect, useState } from "react";
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import type { Pet } from "@acme/pet-sdk";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import type { Pet } from "@acme/pet-store-rest-sdk";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export function usePet(id: string) {
   const [pet, setPet] = useState<Pet | null>(null);
@@ -42,7 +44,7 @@ export function usePet(id: string) {
     const controller = new AbortController();
 
     void getPet(
-      petHttpClient,
+      httpClient,
       { id },
       { signal: controller.signal },
     ).then(setPet, (caught) => {

@@ -5,9 +5,9 @@
 ```ts
 import {
   HttpClient,
-} from "@acme/pet-sdk/http-client";
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import type { Pet } from "@acme/pet-sdk";
+} from "@acme/pet-store-rest-sdk/http-client";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import type { Pet } from "@acme/pet-store-rest-sdk";
 
 export function loadPetForSsr(
   incomingRequest: Request,

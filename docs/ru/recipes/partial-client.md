@@ -2,6 +2,8 @@
 
 Если generated SDK содержит сотни operations, отдельному домену обычно нужны только несколько из них. Частичный клиент сохраняет удобный bound API, но не импортирует полный `operationsTree`.
 
+Тот же способ работает с ручными operations. Различается только источник imports и `createApiClient`; решение о частичном клиенте определяется границей домена, а не способом создания operations.
+
 ## Пример большого домена
 
 Ниже используются условные generated-имена commerce SDK. В реальном проекте возьмите exports из своего `operations/index.ts`.
@@ -18,9 +20,9 @@ import {
   getProductPrice,
   getSkuPharmacies,
 } from "../../infra/commerce-api/generated/operations/index.js";
-import { commerceHttpClient } from "../../infra/commerce-api/client.js";
+import { httpClient } from "../../infra/commerce-api/http-client.js";
 
-export const ordersApi = createApiClient(commerceHttpClient, {
+export const ordersApi = createApiClient(httpClient, {
   orders: {
     cancel: cancelOrder,
     create: createOrder,
@@ -35,7 +37,7 @@ export const ordersApi = createApiClient(commerceHttpClient, {
     getProduct,
     getProductPrice,
   },
-} as const);
+});
 ```
 
 Домен вызывает короткие, осмысленные methods:
@@ -64,9 +66,9 @@ import {
   getOrders,
   getProduct,
 } from "@acme/commerce-sdk/operations";
-import { commerceHttpClient } from "../../infra/commerce-api/client.js";
+import { httpClient } from "../../infra/commerce-api/http-client.js";
 
-export const ordersApi = createApiClient(commerceHttpClient, {
+export const ordersApi = createApiClient(httpClient, {
   orders: {
     cancel: cancelOrder,
     create: createOrder,
@@ -75,7 +77,7 @@ export const ordersApi = createApiClient(commerceHttpClient, {
   catalog: {
     getProduct,
   },
-} as const);
+});
 ```
 
 Для такого import package должен экспортировать `./operations`, сохранять ESM и корректно объявлять `sideEffects: false`.
@@ -91,7 +93,7 @@ export const ordersApi = createApiClient(commerceHttpClient, {
 Не импортируйте `operationsTree` и не берите transport из application barrel, который реэкспортирует полный API-клиент. Используйте конкретный `client` module:
 
 ```ts
-import { commerceHttpClient } from "../../infra/commerce-api/client.js";
+import { httpClient } from "../../infra/commerce-api/http-client.js";
 ```
 
 ## Когда использовать

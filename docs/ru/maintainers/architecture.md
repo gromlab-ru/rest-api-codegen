@@ -1,20 +1,24 @@
-# Архитектура
+# Архитектура проекта
 
 ## Компоненты проекта
 
 ```text
-OpenAPI JSON
-    │
-    ▼
-rest-api-codegen CLI
-    │
-    ├── swagger-typescript-api: parsing и metadata
-    ├── project templates: contracts и operations
-    └── embedded runtime source: HttpClient и createApiClient
-    │
-    ▼
-TypeScript REST SDK
+                         ┌──────────────────────────────┐
+OpenAPI JSON ──► CLI ───►│ Generated types + operations │
+                         └──────────────────────────────┘
+                                        │
+                                        ▼
+                            HttpClient + createApiClient
+                                        ▲
+                                        │
+                         ┌──────────────────────────────┐
+No OpenAPI ─────────────►│ Manual types + operations    │
+                         └──────────────────────────────┘
 ```
+
+CLI использует `swagger-typescript-api` для parsing и metadata, project templates для contracts и operations и embedded runtime source для `HttpClient` и `createApiClient`.
+
+Generated и ручные operations следуют одному контракту. Смешанный сценарий временно объединяет оба источника, когда отдельную generated operation нужно исправить до обновления OpenAPI.
 
 ## CLI и публичный API пакета
 
@@ -28,7 +32,7 @@ CLI является единственным публичным интерфе�
 - `createApiClient`;
 - transport и tree-типы.
 
-Он нужен для полностью ручных REST clients. Generated SDK не зависит от этого runtime во время выполнения.
+Он нужен для ручного API-клиента, когда OpenAPI ещё нет. Generated SDK не зависит от установленного пакета во время выполнения, поскольку содержит собственную копию этих primitives.
 
 ## Pipeline генерации
 
@@ -46,8 +50,8 @@ CLI является единственным публичным интерфе�
 Operation — обычная функция с transport первым аргументом:
 
 ```ts
-import type { ApiRequestClient, RequestParams } from "@acme/pet-sdk";
-import type { Pet } from "@acme/pet-sdk";
+import type { ApiRequestClient, RequestParams } from "@acme/pet-store-rest-sdk";
+import type { Pet } from "@acme/pet-store-rest-sdk";
 
 export const getPetManually = (
   http: ApiRequestClient,
@@ -93,10 +97,12 @@ export const getPetManually = (
 - создание `package.json` отдельного SDK;
 - исправление семантически неверной OpenAPI.
 
-Соответствующие решения принадлежат приложению или SDK-пакету и описаны в [рецептах](./recipes/index.md).
+Соответствующие решения принадлежат приложению или SDK-пакету и описаны в [рецептах](../recipes/index.md).
+
+Ручной сценарий также оставляет за приложением описание типов, request metadata и дерева operations. Пакет предоставляет transport и механизм композиции, но не генерирует ручной код без OpenAPI.
 
 ## Размещение и композиция
 
 Генератор не требует отдельного npm-пакета. Output может находиться в приложении, workspace-пакете или публикуемом SDK-пакете.
 
-После генерации приложение создаёт configured `HttpClient`, а затем выбирает [уровень композиции](./client-composition.md): полный `operationsTree`, частичное domain tree или точечную operation. Эти уровни используют одинаковые generated primitives и могут сосуществовать.
+После генерации приложение создаёт configured `HttpClient`, а затем выбирает [уровень композиции](../08_client-composition.md): полный `operationsTree`, частичное domain tree или точечную operation. Ручной API поддерживает те же уровни через primitives корневого пакета. В смешанном сценарии используйте primitives generated SDK и временно заменяйте только нужные leaves.

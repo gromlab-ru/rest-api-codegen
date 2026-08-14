@@ -1,28 +1,30 @@
 # Полный API-клиент
 
-Полный клиент привязывает generated `operationsTree` к одному configured transport. Это основной удобный API общего infra-слоя.
+Полный клиент привязывает generated `operationsTree` к одному configured transport. Это основной общий API приложения.
+
+Ниже показан generated SDK. Для ручного сценария приложение описывает полное дерево самостоятельно и передаёт его в тот же `createApiClient`; пример приведён в [руководстве по ручному API](../06_manual-client.md#полный-api-клиент).
 
 ## SDK внутри приложения
 
-`client.ts`:
+`http-client.ts`:
 
 ```ts
 import { HttpClient } from "./generated/http-client.js";
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
 });
 ```
 
-`rest-api.ts`:
+`api.ts`:
 
 ```ts
 import { createApiClient } from "./generated/create-api-client.js";
 import { operationsTree } from "./generated/operations-tree.js";
-import { petHttpClient } from "./client.js";
+import { httpClient } from "./http-client.js";
 
-export const petRestApi = createApiClient(
-  petHttpClient,
+export const petStoreApi = createApiClient(
+  httpClient,
   operationsTree,
 );
 ```
@@ -30,10 +32,10 @@ export const petRestApi = createApiClient(
 Вызов использует generated groups и operation names:
 
 ```ts
-import { petRestApi } from "./infra/pet-api/rest-api.js";
+import { petStoreApi } from "./infra/pet-store-api/api.js";
 
-const pet = await petRestApi.pets.getPet({ id: "42" });
-const pets = await petRestApi.admin.listPets({ q: "active" });
+const pet = await petStoreApi.pets.getPet({ id: "42" });
+const pets = await petStoreApi.admin.listPets({ q: "active" });
 ```
 
 ## SDK как пакет
@@ -41,17 +43,17 @@ const pets = await petRestApi.admin.listPets({ q: "active" });
 Меняются только import paths:
 
 ```ts
-import { createApiClient } from "@acme/pet-sdk/create-api-client";
-import { operationsTree } from "@acme/pet-sdk/operations-tree";
-import { petHttpClient } from "./client.js";
+import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
+import { operationsTree } from "@acme/pet-store-rest-sdk/operations-tree";
+import { httpClient } from "./http-client.js";
 
-export const petRestApi = createApiClient(
-  petHttpClient,
+export const petStoreApi = createApiClient(
+  httpClient,
   operationsTree,
 );
 ```
 
-Transport обычно импортирует `HttpClient` из `@acme/pet-sdk/http-client`.
+Transport обычно импортирует `HttpClient` из `@acme/pet-store-rest-sdk/http-client`.
 
 ## Граница полного клиента
 
@@ -59,7 +61,7 @@ Transport обычно импортирует `HttpClient` из `@acme/pet-sdk/h
 
 Это ожидаемо и полезно, когда:
 
-- infra-слой действительно использует значительную часть API;
+- общий API-модуль действительно использует значительную часть endpoints;
 - приложение не делит API по lazy chunks;
 - важнее единая generated namespace-поверхность, чем минимальный конкретный chunk.
 

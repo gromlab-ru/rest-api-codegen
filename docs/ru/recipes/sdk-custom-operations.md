@@ -1,6 +1,6 @@
-# Пользовательские operations поверх ошибочной OpenAPI
+# Смешанный сценарий поверх ошибочной OpenAPI
 
-Предположим, спецификация содержит неверную schema и не кодирует path parameter. Generated-файл не исправляется вручную: следующая генерация всё равно его заменит.
+Предположим, спецификация содержит неверную schema и не кодирует path parameter, а исправить её до текущего релиза нельзя. Generated-файл не редактируется вручную: следующая генерация всё равно его заменит. Вместо этого SDK временно дополняется исправленной operation, которую нужно удалить после обновления OpenAPI.
 
 ## Структура
 
@@ -9,7 +9,7 @@ src/
 ├── generated/
 ├── custom-operations/
 │   └── get-pet-corrected.ts
-├── client-tree.ts
+├── operations-tree.ts
 └── index.ts
 ```
 
@@ -55,20 +55,20 @@ Transport-типы импортируются из расширяемого SDK,
 ```ts
 import {
   createApiClient,
-  operationsTree,
+  operationsTree as generatedOperationsTree,
 } from "./generated/index.js";
 import { getPetCorrected } from "./custom-operations/get-pet-corrected.js";
-import { petHttpClient } from "./client.js";
+import { httpClient } from "./http-client.js";
 
-export const clientTree = {
-  ...operationsTree,
+export const operationsTree = {
+  ...generatedOperationsTree,
   pets: {
-    ...operationsTree.pets,
+    ...generatedOperationsTree.pets,
     getPet: getPetCorrected,
   },
-} as const;
+};
 
-export const api = createApiClient(petHttpClient, clientTree);
+export const petStoreApi = createApiClient(httpClient, operationsTree);
 ```
 
 Такой spread импортирует полное generated-дерево. Если приложению нужен только один домен, соберите частичное дерево явно:
@@ -76,11 +76,11 @@ export const api = createApiClient(petHttpClient, clientTree);
 ```ts
 import { createApiClient } from "./generated/create-api-client.js";
 import { getPetCorrected } from "./custom-operations/get-pet-corrected.js";
-import { petHttpClient } from "./client.js";
+import { httpClient } from "./http-client.js";
 
-export const petApi = createApiClient(petHttpClient, {
+export const petStoreApi = createApiClient(httpClient, {
   pets: { getPet: getPetCorrected },
-} as const);
+});
 ```
 
 ## Public facade
@@ -90,7 +90,7 @@ export const petApi = createApiClient(petHttpClient, {
 ```ts
 export * from "./generated/index.js";
 export { getPetCorrected } from "./custom-operations/get-pet-corrected.js";
-export { clientTree } from "./client-tree.js";
+export { operationsTree } from "./operations-tree.js";
 ```
 
 Если исправленная operation должна называться `getPet`, соберите facade явными exports и не реэкспортируйте generated `getPet` через `export *`.
@@ -111,14 +111,14 @@ let captured: FullRequestParams | undefined;
 const http: ApiRequestClient = {
   request: async <T>(request: FullRequestParams) => {
     captured = request;
-    return request as T;
+    return request as unknown as T;
   },
 };
 
 await getPetCorrected(http, { id: "a/b", verbose: true });
 
 if (captured?.path !== "/pets/a%2Fb") {
-  throw new Error("Неверный path пользовательской operation");
+  throw new Error("Неверный path временной operation");
 }
 ```
 

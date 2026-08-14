@@ -1,33 +1,44 @@
 # Рецепты
 
-Рецепты разделяют два независимых решения:
+Перед выбором рецепта определите две независимые вещи:
 
-1. Где находится generated SDK: внутри приложения, workspace-пакета или отдельного npm-пакета.
-2. Как он используется: как полный клиент, частичный доменный клиент или точечная operation.
+1. Откуда берутся types и operations.
+2. Какой объём API нужен конкретному consumer.
 
-Во всех примерах приложение создаёт configured `HttpClient`. Он остаётся общей базой для всех API-клиентов и точечных вызовов.
+Общая схема выбора приведена в [обзоре](../01_overview.md), а имена файлов и exports - в [соглашениях](../02_naming-conventions.md). Во всех вариантах один configured `HttpClient` остаётся общей базой для API-клиентов и точечных вызовов.
 
-## Начало работы
+## Выбрать сценарий
 
-- [SDK внутри приложения](./local-sdk.md) — базовый вариант для React/Vite и небольших проектов.
-- [SDK как workspace или npm-пакет](./sdk-package.md) — рекомендуемая изоляция для монорепозиториев и нескольких consumers.
-- [Полный API-клиент](./full-client.md) — привязка всего `operationsTree` к transport.
+- [Generated SDK](../05_generated-sdk.md) - актуальная OpenAPI является источником истины.
+- [Ручное создание API-клиента](../06_manual-client.md) - OpenAPI пока нет.
+- [Смешанный сценарий](../07_custom-operations.md) - отдельная generated operation временно исправляется вручную.
+- [Смешанный сценарий поверх ошибочной OpenAPI](./sdk-custom-operations.md) - законченный пример временной подмены.
 
-## Минимальные чанки
+## Выбрать способ использования
 
-- [Частичный доменный клиент](./partial-client.md) — несколько выбранных operations из одного barrel.
-- [Точечная operation](./direct-operation.md) — hook, lazy module или небольшой adapter.
+- [Полный API-клиент](./full-client.md) - весь API доступен через одно привязанное дерево.
+- [Частичный доменный клиент](./partial-client.md) - domain получает только связанную группу operations.
+- [Точечная operation](./direct-operation.md) - hook, lazy module или adapter использует один endpoint.
 
-## Расширение и эксплуатация
+Способы не исключают друг друга. Выбирайте их на уровне consumer и import boundary, а не один раз для всего приложения.
 
-- [Пользовательские operations поверх ошибочной OpenAPI](./sdk-custom-operations.md).
-- [Детерминированная генерация в CI](./deterministic-generation-ci.md).
+## Разместить generated SDK
+
+- [SDK внутри приложения](./local-sdk.md) - базовый вариант для React/Vite и одного consumer.
+- [SDK как workspace или npm-пакет](./sdk-package.md) - несколько consumers или независимый package lifecycle.
+
+## Настроить transport
+
 - [JWT через `onRequest`](./jwt-auth.md).
 - [Cookie-аутентификация](./cookie-auth.md).
 - [Refresh token и ограниченный retry](./refresh-token.md).
-- [React без generated hooks](./react-client.md).
-- [FormData и non-JSON responses](./file-upload.md).
 - [Ошибки, retry и cancellation](./errors-retry-cancellation.md).
 - [SSR и `customFetch`](./ssr-custom-fetch.md).
+- [FormData и non-JSON responses](./file-upload.md).
 
-Общая модель описана в разделе [композиции API-клиента](../client-composition.md), а transport-контракт — в справочнике [`HttpClient`](../http-client.md).
+## Интегрировать и эксплуатировать
+
+- [React без generated hooks](./react-client.md).
+- [Детерминированная генерация в CI](./deterministic-generation-ci.md).
+
+Подробный transport-контракт описан в справочнике [`HttpClient`](../09_http-client.md).

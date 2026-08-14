@@ -5,16 +5,21 @@
 `HttpClient` — Fetch-based transport. Его экземпляр передаётся generated или ручным operations. Обычно приложение создаёт один configured transport на API и переиспользует его в полном клиенте, частичных клиентах и точечных вызовах.
 
 ```ts
-import { HttpClient } from "@acme/pet-sdk/http-client";
+import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
   credentials: "same-origin",
   timeout: 10_000,
 });
 ```
 
-Generated SDK и корневой npm-пакет содержат одинаковую реализацию transport. Для generated operations используйте `HttpClient` из того же SDK.
+Generated SDK и корневой npm-пакет содержат одинаковую реализацию transport:
+
+- для ручного API без OpenAPI импортируйте `HttpClient` из `@gromlab/rest-api-codegen`;
+- для generated и смешанного сценариев импортируйте `HttpClient` из generated SDK.
+
+Не смешивайте два runtime одного API без необходимости: это, в частности, создаёт разные identity класса `ApiError`.
 
 ## Конфигурация
 
@@ -44,7 +49,7 @@ Constructor намеренно не принимает общий `signal` и `c
 - корректно добавляет query перед URL fragment.
 
 ```ts
-import { HttpClient } from "@acme/pet-sdk/http-client";
+import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
 
 const http = new HttpClient({ baseUrl: "https://api.example.com" });
 
@@ -89,7 +94,7 @@ Object-to-FormData сохраняет `Blob`, строкует primitives и с�
 `responseParser` получает clone исходного `Response` и полностью заменяет встроенный parser:
 
 ```ts
-import { HttpClient, type ResponseParser } from "@acme/pet-sdk/http-client";
+import { HttpClient, type ResponseParser } from "@acme/pet-store-rest-sdk/http-client";
 
 const responseParser: ResponseParser = async (response, format) => {
   if (response.status === 204) return null;
@@ -154,11 +159,11 @@ Request поддерживает:
 Несколько источников cancellation композируются. Причина внешнего abort сохраняется. Вызов `http.abortRequest(token)` отменяет все одновременно активные requests с этим token на данном экземпляре `HttpClient`, включая token `0` и пустую строку.
 
 ```ts
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import { petHttpClient } from "./client.js";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import { httpClient } from "./http-client.js";
 const controller = new AbortController();
 
-export const request = getPet(petHttpClient, { id: "42" }, {
+export const request = getPet(httpClient, { id: "42" }, {
   signal: controller.signal,
   timeout: 5_000,
 });

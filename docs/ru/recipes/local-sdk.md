@@ -1,6 +1,6 @@
 # SDK внутри приложения
 
-Отдельный пакет не всегда оправдан или доступен. В обычном React/Vite-проекте SDK можно генерировать в выделенный infra-каталог приложения.
+Отдельный пакет не всегда оправдан или доступен. В обычном React/Vite-проекте SDK можно генерировать в выделенный каталог приложения. В примере используется путь `src/infra/commerce-api`, но генератор не предписывает архитектуру каталогов.
 
 ## Структура
 
@@ -9,8 +9,8 @@ src/
 ├── infra/
 │   └── commerce-api/
 │       ├── generated/       # только rest-api-codegen
-│       ├── client.ts        # configured HttpClient
-│       ├── rest-api.ts      # полный клиент
+│       ├── http-client.ts   # configured HttpClient
+│       ├── api.ts           # полный клиент
 │       └── index.ts
 └── features/
     └── orders/
@@ -23,28 +23,27 @@ src/
 ```json
 {
   "scripts": {
-    "generate:api": "rest-api-codegen --input ./openapi/commerce.json --output ./src/infra/commerce-api/generated"
-  },
-  "devDependencies": {
-    "@gromlab/rest-api-codegen": "5.2.0"
+    "generate:commerce-api": "npx --yes @gromlab/rest-api-codegen@5.2.0 --input ./openapi/commerce.openapi.json --output ./src/infra/commerce-api/generated"
   }
 }
 ```
 
 ```bash
-npm run generate:api
+npm run generate:commerce-api
 ```
 
 Не добавляйте ручные файлы в `generated`: успешная регенерация заменяет каталог целиком.
 
+Генератор не устанавливается в приложение: `npx` загружает указанную версию для запуска, а generated SDK содержит собственные runtime primitives.
+
 ## Общий transport
 
-`src/infra/commerce-api/client.ts`:
+`src/infra/commerce-api/http-client.ts`:
 
 ```ts
 import { HttpClient } from "./generated/http-client.js";
 
-export const commerceHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: import.meta.env.VITE_COMMERCE_API_URL,
   credentials: "include",
 });
@@ -54,15 +53,15 @@ export const commerceHttpClient = new HttpClient({
 
 ## Полный клиент
 
-`src/infra/commerce-api/rest-api.ts`:
+`src/infra/commerce-api/api.ts`:
 
 ```ts
 import { createApiClient } from "./generated/create-api-client.js";
 import { operationsTree } from "./generated/operations-tree.js";
-import { commerceHttpClient } from "./client.js";
+import { httpClient } from "./http-client.js";
 
-export const commerceRestApi = createApiClient(
-  commerceHttpClient,
+export const commerceApi = createApiClient(
+  httpClient,
   operationsTree,
 );
 ```
@@ -72,12 +71,12 @@ export const commerceRestApi = createApiClient(
 ## Public facade
 
 ```ts
-export { commerceHttpClient } from "./client.js";
-export { commerceRestApi } from "./rest-api.js";
+export { commerceApi } from "./api.js";
+export { httpClient } from "./http-client.js";
 export type * from "./generated/data-contracts.js";
 ```
 
-Для частичного клиента и hook импортируйте transport прямо из `client.ts`, а не из facade, который также реэкспортирует полный клиент. Это сохраняет явную границу чанка.
+Для частичного клиента и hook импортируйте transport прямо из `http-client.ts`, а не из facade, который также реэкспортирует полный клиент. Это сохраняет явную границу чанка.
 
 Следующие шаги:
 

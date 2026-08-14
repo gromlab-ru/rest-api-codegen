@@ -6,7 +6,7 @@
 import {
   ApiError,
   HttpClient,
-} from "@acme/pet-sdk/http-client";
+} from "@acme/pet-store-rest-sdk/http-client";
 
 interface RefreshPayload {
   accessToken: string;
@@ -36,7 +36,7 @@ function refreshOnce(): Promise<void> {
   });
 }
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
   credentials: "include",
 
@@ -78,7 +78,7 @@ export const petHttpClient = new HttpClient({
 });
 ```
 
-Полный, частичный и точечный API layers импортируют этот `petHttpClient`. Refresh policy остаётся единой и не копируется рядом с каждой operation.
+Полный, частичный и точечный API layers импортируют этот `httpClient`. Refresh policy остаётся единой и не копируется рядом с каждой operation.
 
 ## Как работает защита от гонок
 

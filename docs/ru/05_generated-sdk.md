@@ -1,5 +1,11 @@
 # Сгенерированный SDK
 
+Generated SDK - это полный набор артефактов, созданных CLI: contracts, operations, transport primitives и дерево operations. API-клиентом в этой документации называется полное или частичное дерево, уже привязанное к настроенному transport через `createApiClient`.
+
+SDK самодостаточен и не импортирует runtime-код из `@gromlab/rest-api-codegen`.
+
+Выбирайте автоматический сценарий, когда OpenAPI доступна, актуальна и может служить источником истины. Если OpenAPI пока нет, используйте [ручной API-клиент](./06_manual-client.md). Если неверна только отдельная generated operation и спецификацию пока нельзя исправить, используйте [временный смешанный сценарий](./07_custom-operations.md).
+
 ## Структура
 
 ```text
@@ -39,7 +45,7 @@ generated/
 ```ts
 import { HttpClient } from "./generated/http-client.js";
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
   credentials: "include",
 });
@@ -51,6 +57,8 @@ Transport отвечает за URL, headers, serialization, Fetch, interceptors
 
 Полное или частичное дерево operations, привязанное к transport через `createApiClient`. Вызовы такого клиента не требуют передавать transport вручную.
 
+Точечный вызов operation API-клиент не создаёт: он передаёт transport первым аргументом напрямую.
+
 ## Сигнатура operation
 
 Низкоуровневая generated operation принимает:
@@ -60,8 +68,8 @@ Transport отвечает за URL, headers, serialization, Fetch, interceptors
 3. Необязательный `RequestParams` конкретного вызова.
 
 ```ts
-import type { ApiRequestClient, RequestParams } from "@acme/pet-sdk";
-import type { GetPetParams, Pet } from "@acme/pet-sdk";
+import type { ApiRequestClient, RequestParams } from "@acme/pet-store-rest-sdk";
+import type { GetPetParams, Pet } from "@acme/pet-store-rest-sdk";
 
 export declare const getPet: (
   http: ApiRequestClient,
@@ -73,7 +81,7 @@ export declare const getPet: (
 `createApiClient` привязывает первый аргумент, сохраняя остальные аргументы и return type:
 
 ```ts
-const pet = await petApi.pets.get({ id: "42" }, { timeout: 3_000 });
+const pet = await petStoreApi.pets.get({ id: "42" }, { timeout: 3_000 });
 ```
 
 Path и query обычно объединяются в один object argument. Optional-only query object получает default `{}`. Всегда ориентируйтесь на фактическую generated-сигнатуру.
@@ -82,7 +90,7 @@ Path и query обычно объединяются в один object argument.
 
 ### Полный клиент
 
-`createApiClient(http, operationsTree)` даёт весь API с generated-группировкой. Это основной удобный клиент общего infra-слоя, но его module подключает все operations.
+`createApiClient(http, operationsTree)` даёт весь API с generated-группировкой. Это основной общий клиент приложения, но его module подключает все operations.
 
 ### Частичный клиент
 
@@ -92,7 +100,7 @@ Path и query обычно объединяются в один object argument.
 
 Hook, lazy-модуль или небольшой adapter может импортировать один файл operation и вызвать его с общим transport. Это leaf-level инструмент для минимального import graph, а не замена композиции всего API-слоя.
 
-Подробные схемы и примеры: [композиция API-клиента](./client-composition.md).
+Подробные схемы и примеры: [композиция API-клиента](./08_client-composition.md).
 
 ## Tree-shaking
 
@@ -132,4 +140,6 @@ URL строится простой конкатенацией `baseUrl + path`;
 - `204` может иметь статический тип `void`, но transport без parser возвращает `null`.
 - Имена operations могут получить безопасные suffixes при коллизиях.
 
-Если OpenAPI содержит ошибку, не редактируйте generated-файл. Используйте [пользовательскую operation](./custom-operations.md).
+Если OpenAPI содержит ошибку, не редактируйте generated-файл. Используйте [временный смешанный сценарий](./07_custom-operations.md).
+
+Если OpenAPI пока нет целиком, начните с [ручного API-клиента](./06_manual-client.md), используя runtime primitives пакета.

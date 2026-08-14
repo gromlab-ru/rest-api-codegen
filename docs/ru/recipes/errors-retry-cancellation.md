@@ -6,11 +6,11 @@
 import {
   ApiError,
   HttpClient,
-} from "@acme/pet-sdk/http-client";
+} from "@acme/pet-store-rest-sdk/http-client";
 
 const retryableStatuses = new Set([502, 503, 504]);
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   onError(error, context) {
     if (
       error instanceof ApiError &&
@@ -26,12 +26,12 @@ export const petHttpClient = new HttpClient({
 });
 ```
 
-Retry policy настраивается один раз в общем `client.ts`. В leaf module можно использовать точечную operation и тот же transport:
+Retry policy настраивается один раз в общем `http-client.ts`. В leaf module можно использовать точечную operation и тот же transport:
 
 ```ts
-import { ApiError } from "@acme/pet-sdk/http-client";
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { ApiError } from "@acme/pet-store-rest-sdk/http-client";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 const petToken = (id: string) => `pet:${id}`;
 
@@ -40,7 +40,7 @@ export async function loadPet(
   signal?: AbortSignal,
 ) {
   try {
-    return await getPet(petHttpClient, { id }, {
+    return await getPet(httpClient, { id }, {
       signal,
       timeout: 5_000,
       cancelToken: petToken(id),
@@ -55,7 +55,7 @@ export async function loadPet(
 }
 
 export function cancelPet(id: string): void {
-  petHttpClient.abortRequest(petToken(id));
+  httpClient.abortRequest(petToken(id));
 }
 ```
 

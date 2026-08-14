@@ -29,7 +29,7 @@ packages/pet-sdk/
 
 ```json
 {
-  "name": "@acme/pet-sdk",
+  "name": "@acme/pet-store-rest-sdk",
   "version": "1.0.0",
   "type": "module",
   "sideEffects": false,
@@ -61,19 +61,20 @@ packages/pet-sdk/
     }
   },
   "scripts": {
-    "generate": "rest-api-codegen --input ./openapi/openapi.json --output ./src",
+    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.0 --input ./openapi/openapi.json --output ./src",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run generate && npm run clean && tsc -p tsconfig.json",
     "prepack": "npm run build"
   },
   "devDependencies": {
-    "@gromlab/rest-api-codegen": "5.2.0",
     "typescript": "^5.0.0"
   }
 }
 ```
 
 `sideEffects: false` необходим для предсказуемого tree-shaking, но указывайте его только если это верно для всего package-кода.
+
+CLI запускается через `npx` с точной версией и не становится dependency SDK-пакета. Сгенерированный `src` самодостаточен.
 
 ## `tsconfig.json`
 
@@ -106,9 +107,9 @@ Generated SDK использует Fetch types, поэтому ему нужны
 Сначала создайте общий transport:
 
 ```ts
-import { HttpClient } from "@acme/pet-sdk/http-client";
+import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
 });
 ```
@@ -116,12 +117,12 @@ export const petHttpClient = new HttpClient({
 Полный клиент использует `operations-tree`:
 
 ```ts
-import { createApiClient } from "@acme/pet-sdk/create-api-client";
-import { operationsTree } from "@acme/pet-sdk/operations-tree";
-import { petHttpClient } from "./client.js";
+import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
+import { operationsTree } from "@acme/pet-store-rest-sdk/operations-tree";
+import { httpClient } from "./http-client.js";
 
-export const petRestApi = createApiClient(
-  petHttpClient,
+export const petStoreApi = createApiClient(
+  httpClient,
   operationsTree,
 );
 ```
@@ -129,26 +130,26 @@ export const petRestApi = createApiClient(
 Частичный клиент импортирует несколько operations из одной точки:
 
 ```ts
-import { createApiClient } from "@acme/pet-sdk/create-api-client";
-import { getPet, listPets } from "@acme/pet-sdk/operations";
-import { petHttpClient } from "./client.js";
+import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
+import { getPet, listPets } from "@acme/pet-store-rest-sdk/operations";
+import { httpClient } from "./http-client.js";
 
-export const catalogApi = createApiClient(petHttpClient, {
+export const catalogApi = createApiClient(httpClient, {
   pets: {
     get: getPet,
     list: listPets,
   },
-} as const);
+});
 ```
 
 Hook с одним endpoint использует subpath:
 
 ```ts
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import { petHttpClient } from "./client.js";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import { httpClient } from "./http-client.js";
 
 export const getPetFetcher = (id: string) =>
-  getPet(petHttpClient, { id });
+  getPet(httpClient, { id });
 ```
 
 ## Workspace package
@@ -163,7 +164,7 @@ Private workspace может использовать ту же compiled package
 src/
 ├── generated/
 ├── custom-operations/
-├── client-tree.ts
+├── operations-tree.ts
 └── index.ts
 ```
 
@@ -171,11 +172,11 @@ src/
 
 ## Практические правила
 
-- Фиксируйте codegen и TypeScript через lockfile.
+- Фиксируйте версию codegen в `npx`-команде, а TypeScript и зависимости SDK-пакета - через lockfile.
 - Очищайте `dist`: `tsc` не удаляет JavaScript и declarations удалённых operations.
 - Не публикуйте OpenAPI автоматически, если она содержит закрытые схемы или внутренние URL.
 - Проверяйте установленный tarball через Node ESM и production bundler.
 - Не импортируйте `operationsTree` в partial или direct chunk.
 - Не используйте namespace `operations.foo` как гарантию tree-shaking; предпочитайте named imports.
 
-Добавление ручных endpoint-ов разобрано в рецепте [пользовательских operations](./sdk-custom-operations.md).
+Временная подмена неверного endpoint разобрана в рецепте [смешанного сценария](./sdk-custom-operations.md).

@@ -94,16 +94,20 @@
 
 ```text
 docs/ru/
-├── index.md
-├── overview.md
-├── getting-started.md
-├── cli.md
-├── architecture.md
-├── generated-sdk.md
-├── http-client.md
-├── custom-operations.md
-├── testing.md
-├── release.md
+├── 00_index.md
+├── 01_overview.md
+├── 02_naming-conventions.md
+├── 03_getting-started.md
+├── 04_cli.md
+├── 05_generated-sdk.md
+├── 06_manual-client.md
+├── 07_custom-operations.md
+├── 08_client-composition.md
+├── 09_http-client.md
+├── maintainers/
+│   ├── index.md
+│   ├── architecture.md
+│   └── testing.md
 └── recipes/
     ├── index.md
     ├── sdk-package.md

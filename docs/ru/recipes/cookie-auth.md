@@ -3,22 +3,22 @@
 Для cross-origin browser requests задайте Fetch option `credentials: "include"` в общем transport:
 
 ```ts
-import { HttpClient } from "@acme/pet-sdk/http-client";
+import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
   credentials: "include",
 });
 ```
 
-Полный, частичный и точечный уровни поверх `petHttpClient` будут отправлять credentials одинаково.
+Полный, частичный и точечный уровни поверх `httpClient` будут отправлять credentials одинаково.
 
 По умолчанию клиент использует `credentials: "same-origin"`. Constructor default можно переопределить для отдельного bound-вызова:
 
 ```ts
-import { petRestApi } from "./rest-api.js";
+import { petStoreApi } from "./api.js";
 
-const pet = await petRestApi.pets.getPet(
+const pet = await petStoreApi.pets.getPet(
   { id: "42" },
   { credentials: "omit" },
 );

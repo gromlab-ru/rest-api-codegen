@@ -2,10 +2,10 @@
 
 Generated protected operations передают `secure: true`. Сам `HttpClient` не хранит token: приложение настраивает авторизацию один раз в общем transport module.
 
-`client.ts`:
+`http-client.ts`:
 
 ```ts
-import { HttpClient } from "@acme/pet-sdk/http-client";
+import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
 
 let accessToken: string | null = null;
 
@@ -13,7 +13,7 @@ export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
 
-export const petHttpClient = new HttpClient({
+export const httpClient = new HttpClient({
   baseUrl: "https://api.example.com",
 
   onRequest(request) {
@@ -30,14 +30,14 @@ export const petHttpClient = new HttpClient({
 
 `new Headers(request.headers)` сохраняет headers конструктора и конкретного вызова независимо от формы `HeadersInit`.
 
-Полный, частичный и точечный уровни используют один `petHttpClient`; повторять interceptor в каждом API module не нужно:
+Полный, частичный и точечный уровни используют один `httpClient`; повторять interceptor в каждом API module не нужно:
 
 ```ts
-import { petRestApi } from "./rest-api.js";
-import { setAccessToken } from "./client.js";
+import { petStoreApi } from "./api.js";
+import { setAccessToken } from "./http-client.js";
 
 setAccessToken("eyJ...");
-const pet = await petRestApi.pets.getPet({ id: "42" });
+const pet = await petStoreApi.pets.getPet({ id: "42" });
 ```
 
 `onRequest` запускается заново при `context.retry()`, поэтому повторная попытка получает актуальный token.

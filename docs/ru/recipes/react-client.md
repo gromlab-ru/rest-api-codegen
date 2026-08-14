@@ -8,9 +8,9 @@ SDK не генерирует React hooks и не навязывает библ�
 
 ```tsx
 import { useEffect, useState } from "react";
-import { getPet } from "@acme/pet-sdk/operations/get-pet";
-import type { Pet } from "@acme/pet-sdk";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
+import type { Pet } from "@acme/pet-store-rest-sdk";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
 export function PetCard({ id }: { id: string }) {
   const [pet, setPet] = useState<Pet | null>(null);
@@ -23,7 +23,7 @@ export function PetCard({ id }: { id: string }) {
     setError(null);
 
     void getPet(
-      petHttpClient,
+      httpClient,
       { id },
       { signal: controller.signal },
     ).then(
@@ -59,23 +59,23 @@ Cleanup отменяет request при смене `id` или unmount. В devel
 Если feature использует несколько endpoints, соберите один partial client вне компонентов:
 
 ```ts
-import { createApiClient } from "@acme/pet-sdk/create-api-client";
-import { createPet, getPet } from "@acme/pet-sdk/operations";
-import { petHttpClient } from "../../infra/pet-api/client.js";
+import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
+import { createPet, getPet } from "@acme/pet-store-rest-sdk/operations";
+import { httpClient } from "../../infra/pet-store-api/http-client.js";
 
-export const petFeatureApi = createApiClient(petHttpClient, {
+export const petFeatureApi = createApiClient(httpClient, {
   pets: {
     create: createPet,
     get: getPet,
   },
-} as const);
+});
 ```
 
 Mutation вызывается из event handler:
 
 ```tsx
 import { useState } from "react";
-import type { Pet } from "@acme/pet-sdk";
+import type { Pet } from "@acme/pet-store-rest-sdk";
 import { petFeatureApi } from "./pet-feature-api.js";
 
 export function CreatePetButton() {
@@ -101,4 +101,4 @@ export function CreatePetButton() {
 
 Для cache, deduplication, optimistic updates и SSR hydration используйте выбранную библиотеку server state. Её fetcher может вызывать точечную operation или method частичного клиента.
 
-Не импортируйте полный infra client в leaf hook, если важен минимальный chunk. Если задан `customFetch`, он обязан передавать `init.signal` в реальный Fetch.
+Не импортируйте полный API-клиент в leaf hook, если важен минимальный chunk. Если задан `customFetch`, он обязан передавать `init.signal` в реальный Fetch.

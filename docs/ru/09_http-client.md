@@ -2,7 +2,7 @@
 
 ## Назначение
 
-`HttpClient` — Fetch-based transport. Его экземпляр передаётся generated или ручным operations. Обычно приложение создаёт один configured transport на API и переиспользует его в полном клиенте, частичных клиентах и точечных вызовах.
+`HttpClient` выполняет запросы через Fetch. Его экземпляр передаётся сгенерированным или ручным операциям. Обычно приложение создаёт один настроенный `HttpClient` для API и использует его в полном клиенте, частичных клиентах и отдельных вызовах.
 
 ```ts
 import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
@@ -14,39 +14,39 @@ export const httpClient = new HttpClient({
 });
 ```
 
-Generated SDK и корневой npm-пакет содержат одинаковую реализацию transport:
+Сгенерированный клиент и корневой npm-пакет содержат одинаковую реализацию `HttpClient`:
 
 - для ручного API без OpenAPI импортируйте `HttpClient` из `@gromlab/rest-api-codegen`;
-- для generated и смешанного сценариев импортируйте `HttpClient` из generated SDK.
+- для автоматического и смешанного сценариев импортируйте `HttpClient` из сгенерированного клиента.
 
-Не смешивайте два runtime одного API без необходимости: это, в частности, создаёт разные identity класса `ApiError`.
+Не смешивайте две реализации `HttpClient` для одного API без необходимости: в частности, у них будут разные классы `ApiError`.
 
 ## Конфигурация
 
 | Поле | Назначение |
 | --- | --- |
-| `baseUrl` | Базовый URL. В generated SDK по умолчанию берётся из `servers[0].url`. |
-| `customFetch` | Замена global `fetch`. |
-| `paramsSerializer` | Полная замена стандартной сериализации query. |
-| `responseParser` | Полная замена встроенного response parser. |
-| `onRequest` | Изменение request перед fetch. |
-| `onResponse` | Обработка успешного parsed response. |
-| `onError` | Обработка HTTP, network, parser, interceptor и abort errors. |
-| Поддерживаемые `RequestInit` fields | `headers`, `credentials`, `cache`, `mode`, `redirect` и другие defaults, кроме `body`, `method` и `signal`. |
-| `timeout` | Default timeout в миллисекундах. |
+| `baseUrl` | Базовый URL. В сгенерированном клиенте по умолчанию берётся из `servers[0].url`. |
+| `customFetch` | Замена глобального `fetch`. |
+| `paramsSerializer` | Полная замена стандартной сериализации параметров строки запроса. |
+| `responseParser` | Полная замена встроенного чтения ответа. |
+| `onRequest` | Изменение запроса перед вызовом Fetch. |
+| `onResponse` | Обработка успешно прочитанного ответа. |
+| `onError` | Обработка ошибок HTTP, сети, чтения ответа, обработчиков и отмены. |
+| Поддерживаемые поля `RequestInit` | `headers`, `credentials`, `cache`, `mode`, `redirect` и другие значения по умолчанию, кроме `body`, `method` и `signal`. |
+| `timeout` | Тайм-аут по умолчанию в миллисекундах. |
 
-Constructor намеренно не принимает общий `signal` и `cancelToken`: cancellation относится к конкретному request.
+Конструктор намеренно не принимает общие `signal` и `cancelToken`: отмена относится к конкретному запросу.
 
-## URL и query
+## URL и параметры запроса
 
-Стандартный serializer:
+Стандартный сериализатор:
 
-- пропускает top-level `undefined`;
+- пропускает `undefined` верхнего уровня;
 - пропускает `undefined` внутри массива;
-- сериализует массив повторяющимися keys;
+- сериализует массив повторяющимися ключами;
 - сохраняет `0`, `false` и пустую строку;
-- кодирует key и value через `encodeURIComponent`;
-- корректно добавляет query перед URL fragment.
+- кодирует ключ и значение через `encodeURIComponent`;
+- корректно добавляет параметры перед фрагментом URL.
 
 ```ts
 import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
@@ -61,17 +61,17 @@ export const result = http.request({
 });
 ```
 
-`paramsSerializer` должен вернуть query string без ведущего `?`.
+`paramsSerializer` должен вернуть строку параметров без ведущего `?`.
 
-## Headers
+## Заголовки
 
-Headers конструктора и request объединяются без учёта регистра. Более позднее значение побеждает.
+Заголовки конструктора и конкретного запроса объединяются без учёта регистра. Более позднее значение имеет приоритет.
 
-`onRequest` получает уже объединённые headers. Если interceptor возвращает собственное поле `headers`, он должен сам сохранить нужные прежние значения, например через `new Headers(request.headers)`. После interceptor transport принудительно выставляет `Content-Type` согласно `type`, а для `FormData` удаляет его, чтобы Fetch добавил multipart boundary.
+`onRequest` получает уже объединённые заголовки. Если обработчик возвращает собственное поле `headers`, он должен сохранить нужные прежние значения, например через `new Headers(request.headers)`. После обработчика клиент выставляет `Content-Type` согласно `type`, а для `FormData` удаляет его, чтобы Fetch добавил границу частей (`boundary`).
 
-Для JSON, JSON API, text и URL encoded клиент выставляет соответствующий `Content-Type`. Для `FormData` ручной `Content-Type` удаляется, чтобы Fetch добавил корректный multipart boundary.
+Для JSON, JSON API, текста и данных в формате URL encoded клиент выставляет соответствующий `Content-Type`. Для `FormData` заданный вручную `Content-Type` удаляется, чтобы Fetch добавил корректную границу частей.
 
-## Body formats
+## Форматы тела запроса
 
 | `ContentType` | Поведение |
 | --- | --- |
@@ -79,19 +79,19 @@ Headers конструктора и request объединяются без уч
 | `JsonApi` | То же с `application/vnd.api+json`. |
 | `Text` | Строка без изменения, остальные значения через `JSON.stringify`. |
 | `UrlEncoded` | Стандартный query serializer. |
-| `FormData` | Готовый `FormData` либо преобразование object. |
+| `FormData` | Готовый `FormData` либо преобразование объекта. |
 
-Если body не равен `undefined` или `null`, а `type` отсутствует, body считается JSON.
+Если `body` не равен `undefined` или `null`, а `type` отсутствует, тело считается JSON.
 
-Object-to-FormData сохраняет `Blob`, строкует primitives и сериализует вложенный object в JSON-строку. Это не универсальная реализация всех OpenAPI styles.
+При преобразовании объекта в `FormData` клиент сохраняет `Blob`, переводит примитивные значения в строки и сериализует вложенный объект в JSON. Все способы кодирования из OpenAPI не поддерживаются.
 
-## Response parsing
+## Чтение ответа
 
-Встроенные formats соответствуют методам Fetch `Response`: `json`, `text`, `blob`, `formData`, `arrayBuffer` и другие доступные keys `Body`.
+Встроенные форматы соответствуют методам Fetch `Response`: `json`, `text`, `blob`, `formData`, `arrayBuffer` и другим доступным ключам `Body`.
 
-Если нет `format` и `responseParser`, клиент возвращает `null` и не читает body.
+Если нет `format` и `responseParser`, клиент возвращает `null` и не читает тело ответа.
 
-`responseParser` получает clone исходного `Response` и полностью заменяет встроенный parser:
+`responseParser` получает копию исходного `Response` и полностью заменяет встроенное чтение ответа:
 
 ```ts
 import { HttpClient, type ResponseParser } from "@acme/pet-store-rest-sdk/http-client";
@@ -105,58 +105,58 @@ const responseParser: ResponseParser = async (response, format) => {
 export const http = new HttpClient({ responseParser });
 ```
 
-Response format выбирается по success response и применяется также к non-2xx response. Для API с разными success/error media types используйте custom parser.
+Формат выбирается по успешному ответу и применяется также к ответам с другими статусами. Если форматы успешного ответа и ошибки различаются, используйте собственный `responseParser`.
 
 ## `ApiError`
 
-Non-2xx response превращается в `ApiError` до `onResponse`.
+Ответ со статусом вне диапазона 2xx превращается в `ApiError` до вызова `onResponse`.
 
 Ошибка содержит:
 
 - `status` и `statusText`;
 - исходный `Response`;
-- parsed `data` и `error`;
-- итоговый request после `onRequest`.
+- прочитанные `data` и `error`;
+- итоговый запрос после `onRequest`.
 
-Не отправляйте `ApiError.request` в telemetry без удаления authorization, cookies и body.
+Не отправляйте `ApiError.request` в телеметрию, пока не удалите данные авторизации, cookie и тело запроса.
 
-## Interceptors
+## Обработчики
 
 Порядок успешного запроса:
 
-1. Merge defaults и request params.
+1. Объединение настроек по умолчанию с параметрами запроса.
 2. `onRequest`.
-3. Fetch.
-4. Response parsing.
-5. Проверка HTTP status.
+3. Вызов Fetch.
+4. Чтение ответа.
+5. Проверка HTTP-статуса.
 6. `onResponse`.
 7. Возврат `response.data`.
 
-Любая ошибка pipeline попадает в `onError`, если он задан.
+Любая ошибка этой последовательности попадает в `onError`, если он задан.
 
 `onError` может:
 
 - бросить ошибку;
-- вернуть fallback;
+- вернуть запасной результат;
 - вернуть `context.retry()`.
 
-Если вернуть `undefined`, ошибка считается обработанной и caller получит `undefined`.
+Если вернуть `undefined`, ошибка считается обработанной и вызывающий код получит `undefined`.
 
-## Retry
+## Повтор запроса
 
-Автоматической retry policy нет. `context.retry()` запускает полную новую попытку с исходными request params и снова вызывает `onRequest`.
+Автоматического повтора нет. `context.retry()` запускает новую попытку с исходными параметрами запроса и снова вызывает `onRequest`.
 
-Всегда ограничивайте retry через `context.retryCount` и учитывайте идемпотентность метода. Готовый пример: [ошибки, retry и cancellation](./recipes/errors-retry-cancellation.md).
+Всегда ограничивайте количество повторов через `context.retryCount` и учитывайте идемпотентность метода. Готовый пример: [ошибки, повтор запросов и отмена](./recipes/react-vite/errors-retry-cancellation.md).
 
-## Cancellation
+## Отмена
 
-Request поддерживает:
+Отдельный запрос поддерживает:
 
 - внешний `AbortSignal`;
 - `timeout`;
 - `cancelToken` типа `Symbol | string | number`.
 
-Несколько источников cancellation композируются. Причина внешнего abort сохраняется. Вызов `http.abortRequest(token)` отменяет все одновременно активные requests с этим token на данном экземпляре `HttpClient`, включая token `0` и пустую строку.
+Несколько источников отмены работают вместе. Причина внешней отмены сохраняется. Вызов `http.abortRequest(token)` отменяет все активные запросы с этим токеном на данном экземпляре `HttpClient`, включая токен `0` и пустую строку.
 
 ```ts
 import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
@@ -171,8 +171,8 @@ export const request = getPet(httpClient, { id: "42" }, {
 controller.abort();
 ```
 
-`customFetch` обязан передавать `init.signal` дальше, иначе cancellation перестанет работать.
+`customFetch` обязан передавать `init.signal` дальше, иначе отмена перестанет работать.
 
 ## Авторизация
 
-Transport не хранит token и не управляет cookies. JWT реализуется через `onRequest`, cookie requests — через Fetch `credentials`. См. рецепты [JWT](./recipes/jwt-auth.md) и [cookies](./recipes/cookie-auth.md).
+`HttpClient` не хранит токен и не управляет cookie. JWT добавляется через `onRequest`, а отправка cookie настраивается через Fetch `credentials`. Готовые примеры: [JWT в React + Vite](./recipes/react-vite/jwt-local-storage.md), [cookie в React + Vite](./recipes/react-vite/cookie-auth.md), [JWT в Next.js](./recipes/nextjs/jwt-local-storage.md) и [cookie в Next.js](./recipes/nextjs/cookie-auth.md).

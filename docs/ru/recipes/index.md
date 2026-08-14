@@ -1,44 +1,55 @@
 # Рецепты
 
-Перед выбором рецепта определите две независимые вещи:
+Выберите раздел по тому, что вы сейчас делаете.
 
-1. Откуда берутся types и operations.
-2. Какой объём API нужен конкретному consumer.
+## [Пакет](./package/index.md)
 
-Общая схема выбора приведена в [обзоре](../01_overview.md), а имена файлов и exports - в [соглашениях](../02_naming-conventions.md). Во всех вариантах один configured `HttpClient` остаётся общей базой для API-клиентов и точечных вызовов.
+Подойдёт, если сгенерированный клиент нужно использовать в нескольких приложениях:
 
-## Выбрать сценарий
+- внутри одного монорепозитория;
+- через npm-реестр;
+- с собственными точками входа и проверкой сборки;
+- с временными ручными исправлениями поверх сгенерированного кода.
 
-- [Generated SDK](../05_generated-sdk.md) - актуальная OpenAPI является источником истины.
-- [Ручное создание API-клиента](../06_manual-client.md) - OpenAPI пока нет.
-- [Смешанный сценарий](../07_custom-operations.md) - отдельная generated operation временно исправляется вручную.
-- [Смешанный сценарий поверх ошибочной OpenAPI](./sdk-custom-operations.md) - законченный пример временной подмены.
+## [React + Vite](./react-vite/index.md)
 
-## Выбрать способ использования
+Здесь собраны примеры для браузерного приложения:
 
-- [Полный API-клиент](./full-client.md) - весь API доступен через одно привязанное дерево.
-- [Частичный доменный клиент](./partial-client.md) - domain получает только связанную группу operations.
-- [Точечная operation](./direct-operation.md) - hook, lazy module или adapter использует один endpoint.
+- полное и частичное подключение API;
+- ручное описание API, если OpenAPI пока нет;
+- исправление одного неверно описанного метода;
+- TanStack Query и SWR;
+- JWT, cookie, обновление токена, ошибки и загрузка файлов.
 
-Способы не исключают друг друга. Выбирайте их на уровне consumer и import boundary, а не один раз для всего приложения.
+## [Next.js App Router](./nextjs/index.md)
 
-## Разместить generated SDK
+Здесь отдельно показана работа в браузере и на сервере:
 
-- [SDK внутри приложения](./local-sdk.md) - базовый вариант для React/Vite и одного consumer.
-- [SDK как workspace или npm-пакет](./sdk-package.md) - несколько consumers или независимый package lifecycle.
+- клиентские и серверные компоненты;
+- полное и частичное подключение API;
+- ручной клиент и исправление неверно описанного метода;
+- TanStack Query и SWR в клиентских компонентах;
+- JWT, cookie и серверная авторизация.
 
-## Настроить transport
+## Как выбрать подход
 
-- [JWT через `onRequest`](./jwt-auth.md).
-- [Cookie-аутентификация](./cookie-auth.md).
-- [Refresh token и ограниченный retry](./refresh-token.md).
-- [Ошибки, retry и cancellation](./errors-retry-cancellation.md).
-- [SSR и `customFetch`](./ssr-custom-fetch.md).
-- [FormData и non-JSON responses](./file-upload.md).
+| Ситуация | Что делать |
+| --- | --- |
+| Есть актуальная OpenAPI | Сгенерировать клиент |
+| OpenAPI пока нет | Описать типы и запросы вручную: [React](./react-vite/manual-client.md) или [Next.js](./nextjs/manual-client.md) |
+| В OpenAPI неверен один метод | Добавить временное исправление: [React](./react-vite/broken-endpoints.md), [Next.js](./nextjs/broken-endpoints.md) или [пакет](./package/generated-with-corrections.md) |
 
-## Интегрировать и эксплуатировать
+После этого выберите форму использования:
 
-- [React без generated hooks](./react-client.md).
-- [Детерминированная генерация в CI](./deterministic-generation-ci.md).
+- полный клиент, если нужна большая часть API;
+- частичный клиент, если разделу приложения нужно несколько связанных методов;
+- отдельная операция, если хук вызывает один метод API.
 
-Подробный transport-контракт описан в справочнике [`HttpClient`](../09_http-client.md).
+Во всех вариантах настройки адреса, авторизации и обработки ошибок хранятся в одном экземпляре `HttpClient`.
+
+## Справочники
+
+- [Обзор проекта](../01_overview.md).
+- [Композиция API-клиента](../08_client-composition.md).
+- [`HttpClient`](../09_http-client.md).
+- [Соглашения по именованию](../02_naming-conventions.md).

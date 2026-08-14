@@ -110,35 +110,56 @@ docs/ru/
 │   └── testing.md
 └── recipes/
     ├── index.md
-    ├── sdk-package.md
-    ├── sdk-custom-operations.md
-    ├── react-client.md
-    ├── jwt-auth.md
-    ├── cookie-auth.md
-    ├── partial-client.md
-    ├── direct-operation.md
-    ├── refresh-token.md
-    ├── file-upload.md
-    ├── errors-and-retry.md
-    └── ssr-custom-fetch.md
+    ├── package/
+    │   ├── index.md
+    │   ├── npm-package.md
+    │   ├── monorepo-package.md
+    │   ├── exports-tree-shaking.md
+    │   ├── generated-with-corrections.md
+    │   └── generation-ci.md
+    ├── react-vite/
+    │   ├── index.md
+    │   ├── full-client.md
+    │   ├── partial-client.md
+    │   ├── manual-client.md
+    │   ├── broken-endpoints.md
+    │   ├── tanstack-query.md
+    │   ├── swr.md
+    │   ├── jwt-local-storage.md
+    │   ├── cookie-auth.md
+    │   ├── refresh-token.md
+    │   ├── errors-retry-cancellation.md
+    │   └── file-upload.md
+    └── nextjs/
+        ├── index.md
+        ├── full-client.md
+        ├── partial-client.md
+        ├── manual-client.md
+        ├── broken-endpoints.md
+        ├── tanstack-query.md
+        ├── swr.md
+        ├── jwt-local-storage.md
+        ├── cookie-auth.md
+        └── ssr-cookie-auth.md
 ```
 
 ### Обязательные рецепты
 
-1. Создание SDK как отдельного npm-пакета.
-2. Добавление исправленных custom operations поверх generated SDK при ошибочной OpenAPI-документации.
-3. Использование generated клиента в React без generated React hooks.
-4. JWT-авторизация через `onRequest`.
-5. Cookie-авторизация через `credentials: "include"`.
-6. Полный, частичный и точечный клиент.
-7. Refresh token с ограниченным retry.
-8. File upload через `FormData`.
-9. Timeout и отмена запросов.
-10. SSR и `customFetch`.
-11. Tree-shaking и `sideEffects: false`.
-12. Детерминированная регенерация SDK в CI.
+1. Пакет рабочего пространства и отдельный npm-пакет.
+2. Публичные точки входа, tree-shaking и `sideEffects: false`.
+3. Автоматически сгенерированный пакет с ручными исправлениями.
+4. Воспроизводимая генерация пакета в CI.
+5. Локальная генерация, ручной API и исправление неверных методов в React + Vite.
+6. Локальная генерация, ручной API и исправление неверных методов в Next.js.
+7. Полный и частичный API-клиенты в React + Vite и Next.js.
+8. Отдельные операции в TanStack Query и SWR для обоих вариантов.
+9. Клиентский компонент с `POST` и серверный компонент с `GET` в Next.js App Router.
+10. JWT из `localStorage` и cookie-аутентификация в браузере для обоих вариантов.
+11. Cookie-аутентификация на сервере Next.js с отдельным API-клиентом для каждого запроса.
+12. Обновление токена с объединением одновременных попыток и ограниченным повтором.
+13. Загрузка файлов, ошибки, повтор запросов, тайм-аут и отмена.
 
-Ручные исправления никогда не размещаются внутри generated-каталога. Custom operation использует публичные primitives SDK и подменяет ошибочную operation при сборке дерева клиента.
+Ручные исправления никогда не размещаются внутри сгенерированного каталога. Исправленная операция использует публичные типы клиента и заменяет ошибочную операцию при сборке дерева.
 
 ### Skills
 

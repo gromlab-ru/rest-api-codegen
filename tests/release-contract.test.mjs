@@ -45,8 +45,7 @@ test('rejects unsupported release tags', () => {
 test('validates a release matching the package version', () => {
   withPackage((packagePath) => {
     assert.deepEqual(checkRelease({
-      eventName: 'release',
-      githubPrerelease: false,
+      eventName: 'push',
       packagePath,
       tag: 'v5.2.0',
     }), {
@@ -61,7 +60,6 @@ test('rejects a release tag with a different version', () => {
     assert.throws(
       () => checkRelease({
         eventName: 'workflow_dispatch',
-        githubPrerelease: false,
         packagePath,
         tag: '5.2.1',
       }),
@@ -70,17 +68,16 @@ test('rejects a release tag with a different version', () => {
   });
 });
 
-test('requires GitHub prerelease flag to match release tag', () => {
+test('identifies a prerelease tag on push', () => {
   withPackage((packagePath) => {
-    assert.throws(
-      () => checkRelease({
-        eventName: 'release',
-        githubPrerelease: false,
-        packagePath,
-        tag: '5.3.0-rc.1',
-      }),
-      /prerelease flag/,
-    );
+    assert.deepEqual(checkRelease({
+      eventName: 'push',
+      packagePath,
+      tag: '5.3.0-rc.1',
+    }), {
+      isPrerelease: true,
+      version: '5.3.0-rc.1',
+    });
   }, {
     name: '@gromlab/rest-api-codegen',
     version: '5.3.0-rc.1',
@@ -91,7 +88,6 @@ test('supports prerelease versions in manual dispatch', () => {
   withPackage((packagePath) => {
     assert.deepEqual(checkRelease({
       eventName: 'workflow_dispatch',
-      githubPrerelease: false,
       packagePath,
       tag: 'v5.3.0-rc.1',
     }), {
@@ -109,7 +105,6 @@ test('rejects an unexpected package', () => {
     assert.throws(
       () => checkRelease({
         eventName: 'workflow_dispatch',
-        githubPrerelease: false,
         packagePath,
         tag: '5.2.0',
       }),

@@ -1,6 +1,6 @@
 # Выпуск релиза
 
-GitHub Actions собирает и публикует `@gromlab/rest-api-codegen` по событию `release.published`. Ручной запуск workflow `Release` принимает уже существующий Git tag и предназначен для безопасного повтора.
+GitHub Actions собирает и публикует `@gromlab/rest-api-codegen` при отправке SemVer tag. Ручной запуск workflow `Release` принимает уже существующий Git tag и предназначен для безопасного повтора.
 
 ## Первая публикация в npm
 
@@ -19,9 +19,9 @@ Workflow имеет разрешение `id-token: write`, поэтому npm C
 2. Выполните `npm run build:skills` и закоммитьте обновлённый generated skill.
 3. Выполните `npm run verify`.
 4. Создайте и отправьте SemVer tag, совпадающий с версией пакета, например `v5.2.0` или `5.2.0`.
-5. Создайте GitHub Release из этого tag. Для версии с суффиксом, например `5.3.0-rc.1`, отметьте release как prerelease.
+5. Отправка tag запустит workflow, который создаст GitHub Release. Версия с суффиксом, например `5.3.0-rc.1`, автоматически создаётся как prerelease.
 
-После публикации GitHub Release workflow повторно проверяет commit tag, package name, version и prerelease status, запускает тесты, собирает tarball и публикует его с dist-tag `latest` либо `next`.
+После отправки tag workflow проверяет commit tag, package name и version, запускает тесты, собирает tarball и публикует его с dist-tag `latest` либо `next`.
 
 ## Повторный запуск
 

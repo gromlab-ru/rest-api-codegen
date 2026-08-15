@@ -26,11 +26,10 @@ export const parseReleaseTag = (tag) => {
 
 export const checkRelease = ({
   eventName,
-  githubPrerelease,
   packagePath,
   tag,
 }) => {
-  if (!['release', 'workflow_dispatch'].includes(eventName)) {
+  if (!['push', 'workflow_dispatch'].includes(eventName)) {
     throw new Error(`Unsupported release event: ${eventName}`);
   }
 
@@ -45,10 +44,6 @@ export const checkRelease = ({
     throw new Error(`Release tag version ${version} does not match package version ${packageJson.version}.`);
   }
 
-  if (eventName === 'release' && githubPrerelease !== isPrerelease) {
-    throw new Error('GitHub prerelease flag does not match release tag.');
-  }
-
   return { isPrerelease, version };
 };
 
@@ -58,7 +53,6 @@ const isMain = process.argv[1]
 if (isMain) {
   const result = checkRelease({
     eventName: process.env.EVENT_NAME,
-    githubPrerelease: process.env.IS_GITHUB_PRERELEASE === 'true',
     packagePath: path.resolve('package.json'),
     tag: process.env.RELEASE_TAG,
   });

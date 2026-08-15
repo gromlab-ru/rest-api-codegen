@@ -24,7 +24,7 @@ package.json
 ```json
 {
   "scripts": {
-    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.0 --input ./openapi/pet-store.openapi.json --output ./src/generated"
+    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.1 --input ./openapi/pet-store.openapi.json --output ./src/generated"
   }
 }
 ```

@@ -47,10 +47,8 @@ describe('agent skill', () => {
 
   test('поставляет core, framework и package references', async () => {
     const requiredReferences = [
-      '04_cli.md',
-      '06_manual-client.md',
-      '10_rest-client-engineering.md',
-      '11_agent-skill.md',
+      'cli.md',
+      'http-client.md',
       'recipes/package/monorepo-package.md',
       'recipes/react-vite/index.md',
       'recipes/nextjs/index.md',

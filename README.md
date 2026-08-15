@@ -9,7 +9,7 @@
 Требования: Node.js 24+, TypeScript 5+, ESM и OpenAPI/Swagger в формате JSON.
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.0 \
+npx --yes @gromlab/rest-api-codegen@5.2.1 \
   --input ./openapi.json \
   --output ./src/generated
 ```
@@ -38,7 +38,7 @@ const pet = await api.pets.getPet({ id: "42" });
 
 ## Документация
 
-[Быстрый старт](./docs/ru/03_getting-started.md) · [CLI](./docs/ru/04_cli.md) · [`HttpClient`](./docs/ru/09_http-client.md) · [Рецепты](./docs/ru/recipes/index.md) · [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
+[CLI](./docs/ru/cli.md) · [`HttpClient`](./docs/ru/http-client.md) · [Рецепты](./docs/ru/recipes/index.md) · [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
 
 ## Лицензия
 

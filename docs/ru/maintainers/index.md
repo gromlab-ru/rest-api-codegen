@@ -6,4 +6,4 @@
 - [Тестирование проекта](./testing.md) - команды, contract suites, fixtures и coverage requirements.
 - [Выпуск релиза](./releases.md) - CI/CD, npm authentication, tags и release artifacts.
 
-Пользовательская документация начинается с [основного index](../00_index.md).
+Пользовательская документация включает [CLI](../cli.md), [`HttpClient`](../http-client.md) и [рецепты интеграции](../recipes/index.md).

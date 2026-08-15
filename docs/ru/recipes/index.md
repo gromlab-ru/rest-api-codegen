@@ -50,7 +50,6 @@
 
 ## Справочники
 
-- [Обзор проекта](../01_overview.md).
-- [Композиция API-клиента](../08_client-composition.md).
-- [`HttpClient`](../09_http-client.md).
-- [Соглашения по именованию](../02_naming-conventions.md).
+- [CLI и устройство generated SDK](../cli.md).
+- [`HttpClient`](../http-client.md).
+- [Архитектура проекта](../maintainers/architecture.md).

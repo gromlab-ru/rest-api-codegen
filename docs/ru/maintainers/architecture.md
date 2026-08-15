@@ -105,4 +105,4 @@ export const getPetManually = (
 
 Генератор не требует отдельного npm-пакета. Output может находиться в приложении, workspace-пакете или публикуемом SDK-пакете.
 
-После генерации приложение создаёт configured `HttpClient`, а затем выбирает [уровень композиции](../08_client-composition.md): полный `operationsTree`, частичное domain tree или точечную operation. Ручной API поддерживает те же уровни через primitives корневого пакета. В смешанном сценарии используйте primitives generated SDK и временно заменяйте только нужные leaves.
+После генерации приложение создаёт configured `HttpClient`, а затем выбирает [уровень композиции](../recipes/index.md#как-выбрать-подход): полный `operationsTree`, частичное domain tree или точечную operation. Ручной API поддерживает те же уровни через primitives корневого пакета. В смешанном сценарии используйте primitives generated SDK и временно заменяйте только нужные leaves.

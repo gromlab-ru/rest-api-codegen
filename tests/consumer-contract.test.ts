@@ -71,7 +71,7 @@ describe('npm package и generated SDK', () => {
     )) as Record<string, any>;
     expect(installedManifest).toMatchObject({
       name: '@gromlab/rest-api-codegen',
-      version: '5.2.0',
+      version: '5.2.1',
       type: 'module',
       sideEffects: false,
       engines: { node: '>=24' },

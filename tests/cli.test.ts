@@ -24,7 +24,7 @@ describe('CLI', () => {
   test('выводит версию package.json', async () => {
     const result = await runCli(['--version']);
     expect(result).toMatchObject({ exitCode: 0, stderr: '' });
-    expect(result.stdout.trim()).toBe('5.2.0');
+    expect(result.stdout.trim()).toBe('5.2.1');
   });
 
   test('агрегирует отсутствующие input и output', async () => {

@@ -18,7 +18,7 @@ GitHub Actions собирает и публикует `@gromlab/rest-api-codegen
 1. Обновите `package.json` и `package-lock.json` командой `npm version <version> --no-git-tag-version`, затем замените закреплённую версию в документации и source skill.
 2. Выполните `npm run build:skills` и закоммитьте обновлённый generated skill.
 3. Выполните `npm run verify`.
-4. Создайте и отправьте SemVer tag, совпадающий с версией пакета, например `v5.2.0` или `5.2.0`.
+4. Создайте и отправьте SemVer tag, совпадающий с версией пакета, например `v5.2.1` или `5.2.1`.
 5. Отправка tag запустит workflow, который создаст GitHub Release. Версия с суффиксом, например `5.3.0-rc.1`, автоматически создаётся как prerelease.
 
 После отправки tag workflow проверяет commit tag, package name и version, запускает тесты, собирает tarball и публикует его с dist-tag `latest` либо `next`.

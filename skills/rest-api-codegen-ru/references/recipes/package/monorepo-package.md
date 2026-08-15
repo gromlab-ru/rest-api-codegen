@@ -80,7 +80,7 @@ package-lock.json
     }
   },
   "scripts": {
-    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.0 --input ./openapi/pet-store.openapi.json --output ./src",
+    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.1 --input ./openapi/pet-store.openapi.json --output ./src",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json"
   },
@@ -139,7 +139,7 @@ export type {
 
 `src/index.ts` экспортирует эти facades, manual data contracts, operations и `operationsTree`. Package `exports` остаётся таким же, как в generated-варианте. Base URL, credentials и configured `HttpClient` создаются в consumer, а не внутри SDK package.
 
-В package scripts оставьте `clean` и `build`, но не добавляйте `generate`, пока specification отсутствует. Operations принимают `ApiRequestClient` первым аргументом и `RequestParams` последним, поэтому consumers используют тот же API composition contract. Реализация и тестирование описаны в [ручном сценарии](../../06_manual-client.md).
+В package scripts оставьте `clean` и `build`, но не добавляйте `generate`, пока specification отсутствует. Operations принимают `ApiRequestClient` первым аргументом и `RequestParams` последним, поэтому consumers используют тот же API composition contract. Transport contract описан в справочнике [`HttpClient`](../../http-client.md).
 
 Когда появится актуальная OpenAPI, сначала генерируйте SDK в `src/generated`, чтобы не удалить ручной source. Переводите верхнеуровневые facades и operations на generated exports постепенно, затем удалите runtime dependency, если package больше не импортирует её напрямую.
 

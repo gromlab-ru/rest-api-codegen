@@ -6,7 +6,7 @@ compatibility: "OpenCode и Claude-compatible agents; для CLI требует�
 metadata:
   language: ru
   package: "@gromlab/rest-api-codegen"
-  package-version: "5.2.0"
+  package-version: "5.2.1"
 ---
 
 # REST API Codegen Expert
@@ -104,12 +104,12 @@ CLI генерирует только TypeScript source. `package.json`, `tsconf
 
 ## Ветка: generated SDK
 
-Прочитай [CLI](references/04_cli.md), [устройство generated SDK](references/05_generated-sdk.md) и [композицию](references/08_client-composition.md).
+Прочитай [CLI и устройство generated SDK](references/cli.md), затем подходящий framework/package recipe.
 
 Поддерживаемый вызов имеет только два обязательных параметра:
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.0 \
+npx --yes @gromlab/rest-api-codegen@5.2.1 \
   --input ./openapi/api.openapi.json \
   --output ./src/infra/api/generated
 ```
@@ -132,7 +132,7 @@ npx --yes @gromlab/rest-api-codegen@5.2.0 \
 
 ## Ветка: ручной клиент
 
-Прочитай [ручной сценарий](references/06_manual-client.md), [`HttpClient`](references/09_http-client.md) и [REST engineering](references/10_rest-client-engineering.md).
+Прочитай [`HttpClient`](references/http-client.md) и подходящий ручной сценарий: [React + Vite](references/recipes/react-vite/manual-client.md), [Next.js](references/recipes/nextjs/manual-client.md) или [workspace SDK](references/recipes/package/monorepo-package.md).
 
 Установи `@gromlab/rest-api-codegen` как runtime dependency. Повторяй contract generated operations:
 
@@ -151,7 +151,7 @@ npx --yes @gromlab/rest-api-codegen@5.2.0 \
 
 ## Ветка: custom operation
 
-Прочитай [смешанный сценарий](references/07_custom-operations.md) и подходящий framework/package recipe.
+Прочитай подходящий сценарий исправления: [React + Vite](references/recipes/react-vite/broken-endpoints.md), [Next.js](references/recipes/nextjs/broken-endpoints.md) или [SDK package](references/recipes/package/generated-with-corrections.md).
 
 Сначала проверь, можно ли исправить каноническую OpenAPI сейчас. Если можно, измени specification, регенерируй SDK и не создавай workaround. Следующие правила применяются только когда source contract временно недоступен для исправления:
 
@@ -166,7 +166,7 @@ npx --yes @gromlab/rest-api-codegen@5.2.0 \
 
 ## Transport и REST policy
 
-Всегда прочитай [REST engineering](references/10_rest-client-engineering.md), если задача затрагивает auth, errors, retry, uploads, pagination, caching или SSR.
+Всегда прочитай [`HttpClient`](references/http-client.md) и подходящий recipe, если задача затрагивает auth, errors, retry, uploads, pagination, caching или SSR.
 
 Проверяй:
 

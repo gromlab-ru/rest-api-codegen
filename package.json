@@ -1,6 +1,6 @@
 {
   "name": "@gromlab/rest-api-codegen",
-  "version": "5.2.1",
+  "version": "5.2.2",
   "description": "Generate framework-agnostic TypeScript REST SDKs from OpenAPI specifications",
   "type": "module",
   "packageManager": "npm@11.16.0",

@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish package and skill
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: npm
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup npm
+        run: npm install --global npm@11.16.0
+
+      - name: Check release contract
+        id: release-contract
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          IS_GITHUB_PRERELEASE: ${{ github.event.release.prerelease || false }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          git rev-parse --verify "refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse HEAD)" = "$(git rev-list -n 1 "$RELEASE_TAG")"
+          node scripts/check-release.mjs
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Build package
+        run: npm run build
+
+      - name: Prepare release files
+        run: mkdir release
+
+      - name: Pack npm package
+        run: npm pack --ignore-scripts --pack-destination release
+
+      - name: Check existing npm package
+        id: npm-release
+        run: |
+          PACKAGE_SPEC=$(node -p "const pkg = require('./package.json'); pkg.name + '@' + pkg.version")
+          TARBALL=$(printf '%s\n' ./release/*.tgz)
+          LOCAL_INTEGRITY=$(node scripts/package-integrity.mjs "$TARBALL")
+
+          if PUBLISHED_INTEGRITY=$(npm view "$PACKAGE_SPEC" dist.integrity 2>/dev/null); then
+            if [ "$LOCAL_INTEGRITY" != "$PUBLISHED_INTEGRITY" ]; then
+              echo "$PACKAGE_SPEC already exists with different contents" >&2
+              echo "local:     $LOCAL_INTEGRITY" >&2
+              echo "published: $PUBLISHED_INTEGRITY" >&2
+              exit 1
+            fi
+
+            echo "$PACKAGE_SPEC is already published with matching integrity"
+            echo "already-published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already-published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pack skill
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          git archive \
+            --format=zip \
+            --prefix=rest-api-codegen-ru/ \
+            --output=release/rest-api-codegen-ru.zip \
+            "$RELEASE_TAG:skills/rest-api-codegen-ru"
+          unzip -t release/rest-api-codegen-ru.zip
+
+      - name: Create and verify checksums
+        working-directory: release
+        run: |
+          sha256sum *.tgz *.zip > SHA256SUMS
+          sha256sum --check SHA256SUMS
+
+      - name: Publish npm package
+        if: steps.npm-release.outputs.already-published != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          DIST_TAG=$(node -p "require('./package.json').version.includes('-') ? 'next' : 'latest'")
+          npm publish ./release/*.tgz --access public --tag "$DIST_TAG" --provenance
+
+      - name: Upload GitHub Release assets
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+          prerelease: ${{ fromJSON(steps.release-contract.outputs.is-prerelease) }}
+          files: |
+            release/*.tgz
+            release/*.zip
+            release/SHA256SUMS
+          overwrite_files: true

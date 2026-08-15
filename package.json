@@ -29,15 +29,18 @@
   },
   "scripts": {
     "build": "npm run clean && tsc -p tsconfig.build.json && node scripts/copy-templates.mjs",
+    "build:skills": "node src/skills/registry.mjs --build",
+    "check:skills": "node src/skills/registry.mjs --check",
     "clean": "node scripts/clean.mjs",
     "dev": "npm run build && node dist/cli.js",
     "start": "node dist/cli.js",
+    "test:release": "node --test tests/release-contract.test.mjs",
     "typecheck": "tsc -p tsconfig.check.json && tsc -p tsconfig.test.json",
     "test": "npm run build && vitest run",
     "test:watch": "npm run build && vitest",
     "test:coverage": "npm run build && vitest run --coverage",
     "prepare:package": "npm run typecheck && npm run build",
-    "verify": "npm run typecheck && npm run test:coverage",
+    "verify": "npm run test:release && npm run check:skills && npm run typecheck && npm run test:coverage",
     "prepack": "npm run prepare:package"
   },
   "dependencies": {

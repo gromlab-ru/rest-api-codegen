@@ -6,7 +6,7 @@
 
 Если OpenAPI ещё нет или отдельный endpoint временно описан неверно, разработку не нужно останавливать: ручные и generated operations используют один контракт и свободно работают в одном API-слое.
 
-[Быстрый старт](./docs/ru/03_getting-started.md) · [Документация](./docs/ru/00_index.md) · [Рецепты](./docs/ru/recipes/index.md) · [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
+[Быстрый старт](./docs/ru/03_getting-started.md) · [Документация](./docs/ru/00_index.md) · [Рецепты](./docs/ru/recipes/index.md) · [Agent skill](./docs/ru/11_agent-skill.md) · [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
 
 ## Не «всё или ничего»
 
@@ -105,6 +105,10 @@ export const loadPet = (id: string) => getPet(httpClient, { id });
 - `operationsTree` намеренно подключает полный API graph;
 - generated-каталог целиком принадлежит генератору.
 
+## Релизы
+
+Публикация npm-пакета и release artifacts выполняется GitHub Actions из SemVer tag. Настройка первой публикации, Trusted Publisher и порядок выпуска описаны в [инструкции для maintainers](./docs/ru/maintainers/releases.md).
+
 ## Документация
 
 - [Документация `rest-api-codegen`](./docs/ru/00_index.md)
@@ -119,6 +123,8 @@ export const loadPet = (id: string) => getPet(httpClient, { id });
     - [Смешанный сценарий](./docs/ru/07_custom-operations.md)
     - [Композиция API-клиента](./docs/ru/08_client-composition.md)
     - [`HttpClient`](./docs/ru/09_http-client.md)
+    - [Проектирование REST-клиента](./docs/ru/10_rest-client-engineering.md)
+    - [Agent skill `rest-api-codegen-ru`](./docs/ru/11_agent-skill.md)
   - [Рецепты](./docs/ru/recipes/index.md)
     - [React + Vite](./docs/ru/recipes/react-vite/index.md)
       - [Полный API-клиент](./docs/ru/recipes/react-vite/full-client.md)
@@ -151,6 +157,7 @@ export const loadPet = (id: string) => getPet(httpClient, { id });
   - [Для maintainers](./docs/ru/maintainers/index.md)
     - [Архитектура проекта](./docs/ru/maintainers/architecture.md)
     - [Тестирование и contract suites](./docs/ru/maintainers/testing.md)
+    - [Выпуск релиза](./docs/ru/maintainers/releases.md)
 
 ## Лицензия
 

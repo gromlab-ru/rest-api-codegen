@@ -4,14 +4,14 @@ GitHub Actions собирает и публикует `@gromlab/rest-api-codegen
 
 ## Первая публикация в npm
 
-Пока пакет отсутствует в npm, для первой публикации нужен granular access token с правом публикации пакетов scope `@gromlab`:
+Пока пакет отсутствует в npm, Trusted Publisher настроить нельзя. Первую версию опубликуйте локально через обычную npm-сессию или краткоживущий granular access token с `Read and write`, доступом к `All Packages` либо scope `@gromlab` и `Bypass two-factor authentication`:
 
-1. Создайте GitHub Environment с именем `npm`.
-2. Добавьте в него secret `NPM_TOKEN` со значением npm-токена.
-3. После первой успешной публикации откройте настройки пакета на npm и добавьте GitHub Actions Trusted Publisher: organization/user `gromlab-ru`, repository `rest-api-codegen`, workflow `release.yml`, environment `npm`, allowed action `npm publish`.
-4. Удалите `NPM_TOKEN` из GitHub после проверки следующего релиза через OIDC.
+1. Выполните `npm run verify`, `npm run build` и `npm pack --ignore-scripts`.
+2. Опубликуйте проверенный tarball командой `npm publish <tarball> --access public --tag latest`.
+3. Настройте Trusted Publisher командой `npm trust github @gromlab/rest-api-codegen --file release.yml --repo gromlab-ru/rest-api-codegen --env npm --allow-publish` либо через настройки пакета на npmjs.com.
+4. Отзовите временный token после создания trust-связи.
 
-Workflow имеет разрешение `id-token: write`, поэтому npm CLI автоматически использует Trusted Publisher, когда он настроен. Для публичного пакета из публичного репозитория публикация также получает npm provenance.
+Для `npm trust` требуется обычная 2FA-сессия: granular token с `Bypass two-factor authentication` для этой операции не принимается. Release workflow не использует npm tokens; разрешение `id-token: write` позволяет npm CLI получить краткоживущие credentials от Trusted Publisher. Для публичного пакета из публичного репозитория публикация также получает npm provenance.
 
 ## Подготовка
 

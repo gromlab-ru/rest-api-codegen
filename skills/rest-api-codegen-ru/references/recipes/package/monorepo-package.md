@@ -80,7 +80,7 @@ package-lock.json
     }
   },
   "scripts": {
-    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.1 --input ./openapi/pet-store.openapi.json --output ./src",
+    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.3 --input ./openapi/pet-store.openapi.json --output ./src",
     "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "build": "npm run clean && tsc -p tsconfig.json"
   },

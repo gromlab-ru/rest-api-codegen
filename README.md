@@ -9,7 +9,7 @@
 Требования: Node.js 24+, TypeScript 5+, ESM и OpenAPI/Swagger в формате JSON.
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.1 \
+npx --yes @gromlab/rest-api-codegen@5.2.3 \
   --input ./openapi.json \
   --output ./src/generated
 ```

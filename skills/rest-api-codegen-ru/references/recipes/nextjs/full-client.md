@@ -40,7 +40,7 @@ cd pet-store-web
 ```json
 {
   "scripts": {
-    "generate:pet-store-api": "npx --yes @gromlab/rest-api-codegen@5.2.1 --input ./openapi/pet-store.openapi.json --output ./src/infra/pet-store-api/generated"
+    "generate:pet-store-api": "npx --yes @gromlab/rest-api-codegen@5.2.3 --input ./openapi/pet-store.openapi.json --output ./src/infra/pet-store-api/generated"
   }
 }
 ```

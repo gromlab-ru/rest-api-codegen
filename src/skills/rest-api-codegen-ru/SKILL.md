@@ -6,7 +6,7 @@ compatibility: "OpenCode и Claude-compatible agents; для CLI требует�
 metadata:
   language: ru
   package: "@gromlab/rest-api-codegen"
-  package-version: "5.2.1"
+  package-version: "5.2.3"
 ---
 
 # REST API Codegen Expert
@@ -109,7 +109,7 @@ CLI генерирует только TypeScript source. `package.json`, `tsconf
 Поддерживаемый вызов имеет только два обязательных параметра:
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.1 \
+npx --yes @gromlab/rest-api-codegen@5.2.3 \
   --input ./openapi/api.openapi.json \
   --output ./src/infra/api/generated
 ```

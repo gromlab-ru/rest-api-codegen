@@ -62,6 +62,10 @@ describe('CLI', () => {
     const output = join(sandbox, 'generated');
     const result = await runCli(['--input', fixturePath('core.openapi.json'), '--output', output]);
     expect(result).toMatchObject({ exitCode: 0, stderr: '' });
+    expect(result.stdout).toContain('Загрузка OpenAPI');
+    expect(result.stdout).toContain('Генерация операций');
+    expect(result.stdout).toContain('6 операций');
     expect(result.stdout).toContain('REST SDK успешно сгенерирован');
   });
+
 });

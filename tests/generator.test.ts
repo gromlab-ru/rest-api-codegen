@@ -159,6 +159,23 @@ describe('naming и escaping', () => {
     expect(files.some((path) => path.includes('delete'))).toBe(true);
     expect(await readFile(join(output, 'http-client.ts'), 'utf8')).toContain('public baseUrl = "";');
   });
+
+  test('алиасит коллизии runtime imports и не импортирует ContentType из документации', async () => {
+    const { output } = await createGenerated('runtime-name-collisions.openapi.json');
+    const request = await readFile(join(output, 'operations', 'request.ts'), 'utf8');
+    const descriptionOnly = await readFile(join(output, 'operations', 'description-only.ts'), 'utf8');
+
+    expect(request).toContain('ApiRequestClient as RuntimeApiRequestClient');
+    expect(request).toContain('RequestParams as RuntimeRequestParams');
+    expect(request).toContain('ContentType as RuntimeContentType');
+    expect(request).toContain('http: RuntimeApiRequestClient');
+    expect(request).toContain('params: RuntimeRequestParams = {}');
+    expect(request).toContain('type: RuntimeContentType.Json');
+    expect(descriptionOnly).not.toContain('import { ContentType');
+
+    const compile = await compileGenerated(output);
+    expect(compile.result.exitCode, compile.result.stdout + compile.result.stderr).toBe(0);
+  });
 });
 
 describe('generation lifecycle', () => {
@@ -184,13 +201,32 @@ describe('generation lifecycle', () => {
     }
   });
 
-  test('повторная генерация детерминирована и удаляет все stale files', async () => {
+  test('повторная генерация удаляет stale files и восстанавливает изменённые generated files', async () => {
     const { output } = await createGenerated();
     const first = await readFileTree(output);
     await writeFile(join(output, 'swr.ts'), 'legacy');
     await writeFile(join(output, 'custom.ts'), 'manual');
-    await generateFixture('core.openapi.json', output);
+    await writeFile(join(output, 'index.ts'), 'changed manually');
+    const progress: string[] = [];
+    const result = await generate(
+      { inputPath: fixturePath('core.openapi.json'), outputPath: output },
+      { onProgress: ({ phase }) => progress.push(phase) },
+    );
     const second = await readFileTree(output);
+    expect(result).toMatchObject({
+      fileCount: 12,
+      operationCount: 6,
+      outputPath: output,
+    });
+    expect(result.modelCount).toBeGreaterThan(0);
+    expect(result.durationMs).toBeGreaterThan(0);
+    expect([...new Set(progress)]).toEqual([
+      'load',
+      'analyze',
+      'contracts',
+      'operations',
+      'indexes',
+    ]);
     expect([...second.keys()]).toEqual([...first.keys()]);
     for (const [path, content] of first) {
       expect(second.get(path)?.equals(content), path).toBe(true);

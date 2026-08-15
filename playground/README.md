@@ -12,4 +12,10 @@ node dist/cli.js \
   --output playground/generated
 ```
 
+```bash
+node dist/cli.js \
+  --input https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.json \
+  --output playground/generated
+```
+
 `playground/generated` полностью игнорируется Git и может содержать устаревший результат прошлых ручных запусков. Перед проверкой удалите или заново сгенерируйте его. Спецификации автоматических contract tests находятся в `tests/fixtures`.

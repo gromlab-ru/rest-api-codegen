@@ -2,12 +2,15 @@ import {
   generateApi as swaggerGenerateApi,
   type GenerateApiConfiguration,
   type GenerateApiOutput,
-  type ModelType,
+  type Hooks,
   type ParsedRoute,
 } from 'swagger-typescript-api';
+import { Biome, Distribution } from '@biomejs/js-api';
+import { Eta } from 'eta';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rename, rm } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GeneratorConfig } from './config.js';
 import { readTextFile, writeFileWithDirs } from './utils/file.js';
@@ -35,6 +38,51 @@ type OperationTreeGroup = {
 type PreparedSpecification = {
   spec: Record<string, unknown>;
   restoreTags: (configuration: GenerateApiConfiguration) => void;
+};
+
+type TypeScriptFormatter = {
+  format: (content: string, filePath: string) => string;
+  shutdown: () => void;
+};
+
+type GeneratedOutputWriter = {
+  outputDir: string;
+  fileCount: number;
+};
+
+type OperationRuntimeNames = {
+  apiRequestClient: string;
+  requestParams: string;
+  contentType: string;
+};
+
+type DataContractsImport = {
+  content: string;
+  names: string[];
+};
+
+type UpstreamCodeGenProcess = Parameters<NonNullable<Hooks['onInit']>>[1];
+
+export type GenerationPhase = 'load' | 'analyze' | 'contracts' | 'operations' | 'indexes';
+
+export type GenerationProgress = {
+  phase: GenerationPhase;
+  current?: number;
+  total?: number;
+  elapsedMs: number;
+};
+
+export type GenerationOptions = {
+  onProgress?: (progress: GenerationProgress) => void;
+};
+
+export type GenerationResult = {
+  outputPath: string;
+  fileCount: number;
+  modelCount: number;
+  operationCount: number;
+  durationMs: number;
+  timings: Record<GenerationPhase, number>;
 };
 
 const DEFAULT_BASE_URL_DECLARATION = "public baseUrl = '';";
@@ -92,9 +140,57 @@ const RESERVED_IDENTIFIERS = new Set([
 
 const PROTOTYPE_PROPERTY_NAMES = new Set(Object.getOwnPropertyNames(Object.prototype));
 const HTTP_METHODS = new Set(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']);
+const CONTENT_TYPE_REQUEST_KINDS = new Set(['JSON', 'JSON_API', 'URL_ENCODED', 'FORM_DATA', 'TEXT']);
+const TYPESCRIPT_IDENTIFIER_PATTERN = /[$_\p{ID_Start}][$\u200C\u200D\p{ID_Continue}]*/gu;
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function createGenerationTracker(onProgress: GenerationOptions['onProgress']) {
+  const startedAt = performance.now();
+  const timings: Record<GenerationPhase, number> = {
+    load: 0,
+    analyze: 0,
+    contracts: 0,
+    operations: 0,
+    indexes: 0,
+  };
+  let activePhase: GenerationPhase | undefined;
+  let phaseStartedAt = startedAt;
+
+  const completeActivePhase = (now: number): void => {
+    if (activePhase) {
+      timings[activePhase] += now - phaseStartedAt;
+    }
+  };
+
+  const emit = (current?: number, total?: number): void => {
+    if (activePhase) {
+      onProgress?.({ phase: activePhase, current, total, elapsedMs: performance.now() - startedAt });
+    }
+  };
+
+  return {
+    start: (phase: GenerationPhase, total?: number): void => {
+      const now = performance.now();
+      completeActivePhase(now);
+      activePhase = phase;
+      phaseStartedAt = now;
+      emit(total === undefined ? undefined : 0, total);
+    },
+    update: (current: number, total?: number): void => emit(current, total),
+    finish: (): Pick<GenerationResult, 'durationMs' | 'timings'> => {
+      const now = performance.now();
+      completeActivePhase(now);
+      activePhase = undefined;
+      return { durationMs: now - startedAt, timings };
+    },
+  };
+}
+
+function compareStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareOperationFiles(left: OperationFileInfo, right: OperationFileInfo): number {
+  return compareStrings(`${left.operationFileName}.js`, `${right.operationFileName}.js`);
 }
 
 function toWords(value: string): string[] {
@@ -191,24 +287,106 @@ function createOperationFiles(routes: ParsedRoute[]): OperationFileInfo[] {
   });
 }
 
-function createDataContractsImport(content: string, modelTypes: ModelType[]): string {
-  const importedNames = modelTypes
-    .map(({ name }) => name)
-    .filter((name) => new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(name)}(?![A-Za-z0-9_$])`, 'm').test(content))
-    .sort((a, b) => a.localeCompare(b));
-
-  if (!importedNames.length) {
-    return '';
+function addModelTypeIdentifiers(
+  content: unknown,
+  modelNames: ReadonlySet<string>,
+  importedNames: Set<string>,
+): void {
+  if (typeof content !== 'string') {
+    return;
   }
 
-  return `import type { ${importedNames.join(', ')} } from "../data-contracts.js";`;
+  for (const [identifier] of content.matchAll(TYPESCRIPT_IDENTIFIER_PATTERN)) {
+    if (identifier && modelNames.has(identifier)) {
+      importedNames.add(identifier);
+    }
+  }
 }
 
-function createHttpClientImport(content: string): string {
-  const imports = ['import type { ApiRequestClient, RequestParams } from "../http-client.js";'];
+function createDataContractsImport(
+  route: ParsedRoute,
+  configuration: GenerateApiConfiguration,
+  modelNames: ReadonlySet<string>,
+): DataContractsImport {
+  const importedNames = new Set<string>();
+  const { parameters, payload, query, requestParams } = route.request;
+  const parameterValues = Array.isArray(parameters)
+    ? parameters
+    : parameters && typeof parameters === 'object'
+      ? Object.values(parameters)
+      : [];
 
-  if (content.includes('ContentType.')) {
-    imports.unshift('import { ContentType } from "../http-client.js";');
+  addModelTypeIdentifiers(route.response.type, modelNames, importedNames);
+  addModelTypeIdentifiers(route.response.errorType, modelNames, importedNames);
+  addModelTypeIdentifiers(payload?.type, modelNames, importedNames);
+
+  if (configuration.config.extractRequestParams && requestParams) {
+    addModelTypeIdentifiers(
+      configuration.utils.getInlineParseContent(
+        requestParams as Parameters<typeof configuration.utils.getInlineParseContent>[0],
+      ),
+      modelNames,
+      importedNames,
+    );
+  } else {
+    for (const parameter of parameterValues) {
+      addModelTypeIdentifiers((parameter as { type?: unknown }).type, modelNames, importedNames);
+    }
+    addModelTypeIdentifiers((query as { type?: unknown } | undefined)?.type, modelNames, importedNames);
+  }
+
+  if (!importedNames.size) {
+    return { content: '', names: [] };
+  }
+
+  const names = [...importedNames].sort((a, b) => a.localeCompare(b));
+  return {
+    content: `import type { ${names.join(', ')} } from "../data-contracts.js";`,
+    names,
+  };
+}
+
+function createRuntimeImportName(sourceName: string, occupiedNames: Set<string>): string {
+  if (!occupiedNames.has(sourceName)) {
+    occupiedNames.add(sourceName);
+    return sourceName;
+  }
+
+  const baseName = `Runtime${sourceName}`;
+  let name = baseName;
+  let suffix = 2;
+  while (occupiedNames.has(name)) {
+    name = `${baseName}${suffix++}`;
+  }
+  occupiedNames.add(name);
+  return name;
+}
+
+function createOperationRuntimeNames(dataContractNames: string[]): OperationRuntimeNames {
+  const occupiedNames = new Set(dataContractNames);
+  return {
+    apiRequestClient: createRuntimeImportName('ApiRequestClient', occupiedNames),
+    requestParams: createRuntimeImportName('RequestParams', occupiedNames),
+    contentType: createRuntimeImportName('ContentType', occupiedNames),
+  };
+}
+
+function createImportSpecifier(sourceName: string, localName: string): string {
+  return sourceName === localName ? sourceName : `${sourceName} as ${localName}`;
+}
+
+function createHttpClientImport(route: ParsedRoute, runtimeNames: OperationRuntimeNames): string {
+  const imports = [
+    `import type { ${[
+      createImportSpecifier('ApiRequestClient', runtimeNames.apiRequestClient),
+      createImportSpecifier('RequestParams', runtimeNames.requestParams),
+    ].join(', ')} } from "../http-client.js";`,
+  ];
+
+  if (CONTENT_TYPE_REQUEST_KINDS.has(route.requestBodyInfo?.contentKind || '')) {
+    imports.push(
+      `import { ${createImportSpecifier('ContentType', runtimeNames.contentType)} } from "../http-client.js";`,
+    );
   }
 
   return imports.join('\n');
@@ -224,7 +402,7 @@ function createOperationTreePropertyName(operationFile: OperationFileInfo): stri
 
 function createOperationTreeContent(configuration: GenerateApiConfiguration, operationFiles: OperationFileInfo[]): string {
   const operationByRoute = new Map(operationFiles.map((operationFile) => [operationFile.route, operationFile]));
-  const imports = operationFiles.map(
+  const imports = operationFiles.toSorted(compareOperationFiles).map(
     (operationFile) =>
       `import { ${operationFile.operationName} } from "./operations/${operationFile.operationFileName}.js";`,
   );
@@ -268,15 +446,6 @@ function createOperationTreeContent(configuration: GenerateApiConfiguration, ope
   return lines.join('\n');
 }
 
-async function renderTemplateFile(
-  generatorOutput: GenerateApiOutput,
-  templatePath: string,
-  data: unknown,
-): Promise<string> {
-  const template = await readTextFile(templatePath);
-  return String(await generatorOutput.renderTemplate(template, data as Record<string, unknown>));
-}
-
 function getEmbeddedClientSourcePath(templatesPath: string, fileName: string): string {
   const sourcePath = resolve(__dirname, 'client', fileName);
   return existsSync(sourcePath) ? sourcePath : resolve(templatesPath, fileName);
@@ -301,34 +470,77 @@ async function renderHttpClient(templatesPath: string, spec: Record<string, unkn
   return source.replace(DEFAULT_BASE_URL_DECLARATION, replacement);
 }
 
-async function writeFormattedFile(
-  generatorOutput: GenerateApiOutput,
-  filePath: string,
-  content: string,
-): Promise<void> {
-  const formattedContent = await generatorOutput.formatTSContent(`${GENERATED_FILE_PREFIX}\n\n${content}`);
-  await writeFileWithDirs(filePath, formattedContent);
-}
-
-async function replaceGeneratedOutput(outputDir: string, stagingDir: string): Promise<void> {
-  const outputParent = dirname(outputDir);
-  const backupDir = join(outputParent, `.${basename(outputDir)}-backup-${process.pid}-${Date.now()}`);
-  const hasExistingOutput = existsSync(outputDir);
-
+async function createTypeScriptFormatter(): Promise<TypeScriptFormatter> {
+  const biome = await Biome.create({ distribution: Distribution.NODE });
   try {
-    if (hasExistingOutput) {
-      await rename(outputDir, backupDir);
-    }
+    const project = biome.openProject();
+    biome.applyConfiguration(project.projectKey, {
+      files: { maxSize: Number.MAX_SAFE_INTEGER },
+      formatter: { indentStyle: 'space' },
+    });
 
-    await rename(stagingDir, outputDir);
-    await rm(backupDir, { recursive: true, force: true });
+    return {
+      format: (content, filePath) => biome.formatContent(project.projectKey, content, { filePath }).content,
+      shutdown: () => biome.shutdown(),
+    };
   } catch (error) {
-    if (hasExistingOutput && !existsSync(outputDir) && existsSync(backupDir)) {
-      await rename(backupDir, outputDir);
-    }
-
+    biome.shutdown();
     throw error;
   }
+}
+
+function cacheUpstreamTemplates(codeGenProcess: UpstreamCodeGenProcess): void {
+  const eta = new Eta({ functionHeader: 'const includeFile = options.includeFile;' });
+  const compiledTemplates = new Map<string, ReturnType<typeof eta.compile>>();
+  const includedTemplates = new Map<string, string>();
+  const renderTemplateData = codeGenProcess.getRenderTemplateData();
+
+  const renderTemplate = (template: string, configuration: Record<string, unknown>): string => {
+    if (!template) {
+      return '';
+    }
+
+    let compiledTemplate = compiledTemplates.get(template);
+    if (!compiledTemplate) {
+      compiledTemplate = eta.compile(template, { async: false });
+      compiledTemplates.set(template, compiledTemplate);
+    }
+
+    return eta.render(compiledTemplate, {
+      ...renderTemplateData,
+      ...configuration,
+    }, {
+      includeFile: (path: string, includeConfiguration: Record<string, unknown>) => {
+        let includedTemplate = includedTemplates.get(path);
+        if (includedTemplate === undefined) {
+          includedTemplate = codeGenProcess.templatesWorker.getTemplateContent(path);
+          includedTemplates.set(path, includedTemplate);
+        }
+        return renderTemplate(includedTemplate, includeConfiguration);
+      },
+    } as never);
+  };
+
+  codeGenProcess.templatesWorker.renderTemplate = renderTemplate;
+}
+
+async function writeFormattedFile(
+  formatter: TypeScriptFormatter,
+  writer: GeneratedOutputWriter,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  const formattedContent = formatter.format(`${GENERATED_FILE_PREFIX}\n\n${content}`, relativePath);
+  await writeGeneratedFile(writer, relativePath, formattedContent);
+}
+
+async function writeGeneratedFile(
+  writer: GeneratedOutputWriter,
+  relativePath: string,
+  content: string,
+): Promise<void> {
+  await writeFileWithDirs(join(writer.outputDir, relativePath), content);
+  writer.fileCount += 1;
 }
 
 function validateSpecification(spec: Record<string, unknown>): void {
@@ -464,8 +676,10 @@ function translateGenerationErrorMessage(message: string): string {
 /**
  * Генерация API клиента из OpenAPI спецификации
  */
-export async function generate(config: GeneratorConfig): Promise<void> {
+export async function generate(config: GeneratorConfig, options: GenerationOptions = {}): Promise<GenerationResult> {
   const templatesPath = resolve(__dirname, 'templates');
+  const tracker = createGenerationTracker(options.onProgress);
+  let formatter: TypeScriptFormatter | undefined;
 
   if (!existsSync(templatesPath)) {
     throw new Error(
@@ -476,9 +690,13 @@ export async function generate(config: GeneratorConfig): Promise<void> {
 
   try {
     const outputDir = resolve(config.outputPath);
-    const outputParent = dirname(outputDir);
+    tracker.start('load');
     const spec = await loadSpecification(config.inputPath);
     const preparedSpecification = prepareSpecification(spec);
+    let analyzedOperations = 0;
+    tracker.start('analyze');
+    const activeFormatter = await createTypeScriptFormatter();
+    formatter = activeFormatter;
     const generatorOutput = await swaggerGenerateApi({
       spec: preparedSpecification.spec,
       httpClientType: 'fetch',
@@ -514,6 +732,21 @@ export async function generate(config: GeneratorConfig): Promise<void> {
         responseErrorSuffix: ['Error', 'Fail', 'Fails', 'ErrorData', 'HttpError', 'BadResponse'],
       },
       hooks: {
+        onInit: (configuration, codeGenProcess) => {
+          // data-contracts.ts has no imports, so parsing the multi-megabyte file in a language service is a no-op.
+          codeGenProcess.codeFormatter.removeUnusedImports = (content) => content;
+          codeGenProcess.codeFormatter.format = async (content) =>
+            activeFormatter.format(content, 'data-contracts.ts');
+          cacheUpstreamTemplates(codeGenProcess);
+          return configuration;
+        },
+        onCreateRoute: (route: ParsedRoute) => {
+          analyzedOperations += 1;
+          if (analyzedOperations % 10 === 0) {
+            tracker.update(analyzedOperations);
+          }
+          return route;
+        },
         onFormatRouteName: (_routeInfo: unknown, templateRouteName: string) => {
           const match = templateRouteName.match(/^(\w+)Controller(\w+)$/);
           const methodName = match?.[2];
@@ -526,90 +759,123 @@ export async function generate(config: GeneratorConfig): Promise<void> {
       output: false,
       fileName: 'index.ts',
     } as Parameters<typeof swaggerGenerateApi>[0]) as unknown as GenerateApiOutput;
+    tracker.update(analyzedOperations);
     preparedSpecification.restoreTags(generatorOutput.configuration);
 
-    await mkdir(outputParent, { recursive: true });
-    const stagingDir = await mkdtemp(join(outputParent, `.${basename(outputDir)}-staging-`));
-
-    try {
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'data-contracts.ts'),
-        await renderTemplateFile(generatorOutput, join(templatesPath, 'data-contracts.ejs'), generatorOutput.configuration),
-      );
-
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'http-client.ts'),
-        await renderHttpClient(templatesPath, spec),
-      );
-
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'create-api-client.ts'),
-        await readTextFile(getEmbeddedClientSourcePath(templatesPath, 'create-api-client.ts')),
-      );
-
-      const operationTemplatePath = join(templatesPath, 'operation.ejs');
-      const operationFiles = createOperationFiles(getAllRoutes(generatorOutput.configuration));
-      const operationExports: string[] = [];
-
-      for (const operationFile of operationFiles) {
-        let operationContent = await renderTemplateFile(generatorOutput, operationTemplatePath, {
-          ...generatorOutput.configuration,
-          route: operationFile.route,
-          operationName: operationFile.operationName,
-        });
-        operationContent = operationContent
-          .replace('__HTTP_CLIENT_IMPORTS__', createHttpClientImport(operationContent))
-          .replace('__DATA_CONTRACT_IMPORTS__', createDataContractsImport(operationContent, generatorOutput.configuration.modelTypes));
-
-        await writeFormattedFile(
-          generatorOutput,
-          join(stagingDir, 'operations', `${operationFile.operationFileName}.ts`),
-          operationContent,
-        );
-
-        operationExports.push(
-          `export { ${operationFile.operationName} } from "./${operationFile.operationFileName}.js";`,
-        );
-      }
-
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'operations', 'index.ts'),
-        operationExports.length ? operationExports.join('\n') : 'export {};',
-      );
-
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'operations-tree.ts'),
-        createOperationTreeContent(generatorOutput.configuration, operationFiles),
-      );
-
-      await writeFormattedFile(
-        generatorOutput,
-        join(stagingDir, 'index.ts'),
-        [
-          'export { createApiClient } from "./create-api-client.js";',
-          'export type { ApiOperation, ApiTree, BoundApi } from "./create-api-client.js";',
-          'export { ApiError, ContentType, HttpClient } from "./http-client.js";',
-          'export type { ApiConfig, ApiRequestClient, CancelToken, ErrorInterceptor, FetchLike, FullRequestParams, HttpResponse, ParamsSerializer, QueryParamsType, RequestContext, RequestInterceptor, RequestParams, ResponseFormat, ResponseInterceptor, ResponseParser } from "./http-client.js";',
-          'export type * from "./data-contracts.js";',
-          'export { operationsTree } from "./operations-tree.js";',
-          'export type { OperationsTree } from "./operations-tree.js";',
-          'export * as operations from "./operations/index.js";',
-          'export * from "./operations/index.js";',
-        ].join('\n'),
-      );
-
-      await replaceGeneratedOutput(outputDir, stagingDir);
-    } catch (error) {
-      await rm(stagingDir, { recursive: true, force: true });
-      throw error;
+    const dataContractsFile = generatorOutput.files[0];
+    if (!dataContractsFile) {
+      throw new Error('Генератор не вернул содержимое data-contracts.ts.');
     }
+
+    const operationFiles = createOperationFiles(getAllRoutes(generatorOutput.configuration));
+    const modelNames = new Set(generatorOutput.configuration.modelTypes.map(({ name }) => name));
+    tracker.start('contracts');
+    await rm(outputDir, { recursive: true, force: true });
+    await mkdir(outputDir, { recursive: true });
+    const writer: GeneratedOutputWriter = { outputDir, fileCount: 0 };
+
+    await writeGeneratedFile(
+      writer,
+      'data-contracts.ts',
+      `${GENERATED_FILE_PREFIX}\n\n${dataContractsFile.fileContent}`,
+    );
+
+    await writeFormattedFile(
+      activeFormatter,
+      writer,
+      'http-client.ts',
+      await renderHttpClient(templatesPath, spec),
+    );
+
+    await writeFormattedFile(
+      activeFormatter,
+      writer,
+      'create-api-client.ts',
+      await readTextFile(getEmbeddedClientSourcePath(templatesPath, 'create-api-client.ts')),
+    );
+
+    const operationTemplatePath = join(templatesPath, 'operation.ejs');
+    const operationTemplate = await readTextFile(operationTemplatePath);
+    tracker.start('operations', operationFiles.length);
+
+    for (const [index, operationFile] of operationFiles.entries()) {
+      const dataContractsImport = createDataContractsImport(
+        operationFile.route,
+        generatorOutput.configuration,
+        modelNames,
+      );
+      const runtimeNames = createOperationRuntimeNames(dataContractsImport.names);
+      let operationContent = String(await generatorOutput.renderTemplate(operationTemplate, {
+        ...generatorOutput.configuration,
+        route: operationFile.route,
+        operationName: operationFile.operationName,
+        runtimeNames,
+      }));
+      operationContent = operationContent
+        .replace('__HTTP_CLIENT_IMPORTS__', createHttpClientImport(operationFile.route, runtimeNames))
+        .replace('__DATA_CONTRACT_IMPORTS__', dataContractsImport.content);
+
+      await writeFormattedFile(
+        activeFormatter,
+        writer,
+        `operations/${operationFile.operationFileName}.ts`,
+        operationContent,
+      );
+
+      const completed = index + 1;
+      if (completed % 10 === 0 || completed === operationFiles.length) {
+        tracker.update(completed, operationFiles.length);
+      }
+    }
+
+    tracker.start('indexes');
+    const operationExports = operationFiles.toSorted(compareOperationFiles).map(
+      (operationFile) =>
+        `export { ${operationFile.operationName} } from "./${operationFile.operationFileName}.js";`,
+    );
+
+    await writeFormattedFile(
+      activeFormatter,
+      writer,
+      'operations/index.ts',
+      operationExports.length ? operationExports.join('\n') : 'export {};',
+    );
+
+    await writeFormattedFile(
+      activeFormatter,
+      writer,
+      'operations-tree.ts',
+      createOperationTreeContent(generatorOutput.configuration, operationFiles),
+    );
+
+    await writeFormattedFile(
+      activeFormatter,
+      writer,
+      'index.ts',
+      [
+        'export { createApiClient } from "./create-api-client.js";',
+        'export type { ApiOperation, ApiTree, BoundApi } from "./create-api-client.js";',
+        'export type * from "./data-contracts.js";',
+        'export { ApiError, ContentType, HttpClient } from "./http-client.js";',
+        'export type { ApiConfig, ApiRequestClient, CancelToken, ErrorInterceptor, FetchLike, FullRequestParams, HttpResponse, ParamsSerializer, QueryParamsType, RequestContext, RequestInterceptor, RequestParams, ResponseFormat, ResponseInterceptor, ResponseParser } from "./http-client.js";',
+        'export { operationsTree } from "./operations-tree.js";',
+        'export type { OperationsTree } from "./operations-tree.js";',
+        'export * from "./operations/index.js";',
+        'export * as operations from "./operations/index.js";',
+      ].join('\n'),
+    );
+
+    return {
+      outputPath: outputDir,
+      fileCount: writer.fileCount,
+      modelCount: generatorOutput.configuration.modelTypes.length,
+      operationCount: operationFiles.length,
+      ...tracker.finish(),
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Ошибка генерации: ${translateGenerationErrorMessage(message)}`);
+  } finally {
+    formatter?.shutdown();
   }
 }

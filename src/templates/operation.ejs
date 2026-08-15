@@ -1,5 +1,5 @@
 <%
-const { utils, route, config, operationName } = it;
+const { utils, route, config, operationName, runtimeNames } = it;
 const { requestBodyInfo, responseBodyInfo, specificArgNameResolver } = route;
 const { _, getInlineParseContent } = utils;
 const { parameters, path, method, payload, query, security, requestParams } = route.request;
@@ -13,7 +13,7 @@ const pathParamsNames = _.map(pathParams, "name");
 const requestConfigParam = {
     name: specificArgNameResolver.resolve(RESERVED_REQ_PARAMS_ARG_NAMES),
     optional: true,
-    type: "RequestParams",
+    type: runtimeNames.requestParams,
     defaultValue: "{}",
 }
 
@@ -50,11 +50,11 @@ const wrapperArgs = _
     .join(', ')
 
 const requestContentKind = {
-    "JSON": "ContentType.Json",
-    "JSON_API": "ContentType.JsonApi",
-    "URL_ENCODED": "ContentType.UrlEncoded",
-    "FORM_DATA": "ContentType.FormData",
-    "TEXT": "ContentType.Text",
+    "JSON": `${runtimeNames.contentType}.Json`,
+    "JSON_API": `${runtimeNames.contentType}.JsonApi`,
+    "URL_ENCODED": `${runtimeNames.contentType}.UrlEncoded`,
+    "FORM_DATA": `${runtimeNames.contentType}.FormData`,
+    "TEXT": `${runtimeNames.contentType}.Text`,
 }
 
 const responseContentKind = {
@@ -70,8 +70,8 @@ const bodyContentKindTmpl = requestContentKind[requestBodyInfo.contentKind] || n
 const responseFormatTmpl = responseContentKind[responseBodyInfo.success && responseBodyInfo.success.schema && responseBodyInfo.success.schema.contentKind] || null;
 const securityTmpl = security ? 'true' : null;
 %>
-__HTTP_CLIENT_IMPORTS__
 __DATA_CONTRACT_IMPORTS__
+__HTTP_CLIENT_IMPORTS__
 
 /**
 <%~ routeDocs.description %>
@@ -81,7 +81,7 @@ __DATA_CONTRACT_IMPORTS__
 <%~ routeDocs.lines %>
 
  */
-export const <%~ operationName %> = (http: ApiRequestClient, <%~ wrapperArgs %>) =>
+export const <%~ operationName %> = (http: <%~ runtimeNames.apiRequestClient %>, <%~ wrapperArgs %>) =>
     http.request<<%~ type %>, <%~ errorType %>>({
         path: `<%~ path %>`,
         method: '<%~ _.upperCase(method) %>',

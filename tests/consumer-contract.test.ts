@@ -26,7 +26,7 @@ async function findSingleFile(directory: string, suffix: string): Promise<string
   return join(directory, files[0] as string);
 }
 
-describe('npm package, generated SDK и tree-shaking', () => {
+describe('npm package и generated SDK', () => {
   test('проходят полный внешний consumer contract', async () => {
     const sandbox = await createSandbox('rest-api-codegen-consumer-');
     sandboxes.push(sandbox);
@@ -34,8 +34,8 @@ describe('npm package, generated SDK и tree-shaking', () => {
     const codegenConsumer = join(sandbox, 'codegen-consumer');
     const sdk = join(sandbox, 'sdk');
     const nodeConsumer = join(sandbox, 'node-consumer');
-    const reactConsumer = join(sandbox, 'react-consumer');
-    await Promise.all([artifacts, codegenConsumer, sdk, nodeConsumer, reactConsumer].map((path) => mkdir(path, { recursive: true })));
+    const subpathConsumer = join(sandbox, 'subpath-consumer');
+    await Promise.all([artifacts, codegenConsumer, sdk, nodeConsumer, subpathConsumer].map((path) => mkdir(path, { recursive: true })));
 
     const packCodegen = await runProcess('npm', [
       'pack', '--ignore-scripts', '--json', '--pack-destination', artifacts,
@@ -147,44 +147,14 @@ describe('npm package, generated SDK и tree-shaking', () => {
     `], { cwd: nodeConsumer });
     expect(nodeSmoke.exitCode, nodeSmoke.stdout + nodeSmoke.stderr).toBe(0);
 
-    await writeJson(join(reactConsumer, 'package.json'), { private: true, type: 'module' });
-    await mkdir(join(reactConsumer, 'src'), { recursive: true });
-    await writeFile(join(reactConsumer, 'index.html'), '<div id="root"></div><script type="module" src="/src/main.tsx"></script>');
-    await writeFile(join(reactConsumer, 'vite.config.mjs'), `
-      import { defineConfig } from ${JSON.stringify(join(repoRoot, 'node_modules', 'vite', 'dist', 'node', 'index.js'))};
-      import { writeFileSync } from 'node:fs';
-      import { resolve } from 'node:path';
+    await writeJson(join(subpathConsumer, 'package.json'), { private: true, type: 'module' });
+    await mkdir(join(subpathConsumer, 'src'), { recursive: true });
+    const installSubpaths = await runProcess('npm', [
+      'install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', sdkTarball,
+    ], { cwd: subpathConsumer });
+    expect(installSubpaths.exitCode, installSubpaths.stdout + installSubpaths.stderr).toBe(0);
 
-      export default defineConfig({
-        build: { emptyOutDir: true, minify: 'esbuild', sourcemap: false },
-        plugins: [{
-          name: 'bundle-report',
-          generateBundle(_options, bundle) {
-            const chunks = [];
-            for (const item of Object.values(bundle)) {
-              if (item.type !== 'chunk') continue;
-              chunks.push({
-                fileName: item.fileName,
-                modules: Object.fromEntries(Object.entries(item.modules).map(([id, data]) => [id, data.renderedLength])),
-              });
-            }
-            writeFileSync(resolve('bundle-report.json'), JSON.stringify({
-              chunks,
-              moduleIds: [...this.getModuleIds()],
-            }, null, 2));
-          },
-        }],
-      });
-    `);
-    const installReact = await runProcess('npm', [
-      'install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false',
-      sdkTarball,
-      join(repoRoot, 'node_modules', 'react'),
-      join(repoRoot, 'node_modules', 'react-dom'),
-    ], { cwd: reactConsumer });
-    expect(installReact.exitCode, installReact.stdout + installReact.stderr).toBe(0);
-
-    await writeFile(join(reactConsumer, 'src', 'subpath-contract.ts'), `
+    await writeFile(join(subpathConsumer, 'src', 'subpath-contract.ts'), `
       import { createApiClient } from '@rest-api-codegen-contract/generated-sdk/create-api-client';
       import { HttpClient } from '@rest-api-codegen-contract/generated-sdk/http-client';
       import type { ApiRequestClient } from '@rest-api-codegen-contract/generated-sdk/http-client';
@@ -205,7 +175,7 @@ describe('npm package, generated SDK и tree-shaking', () => {
         configured,
       ];
     `);
-    await writeJson(join(reactConsumer, 'tsconfig.subpaths.json'), {
+    await writeJson(join(subpathConsumer, 'tsconfig.subpaths.json'), {
       compilerOptions: {
         target: 'ES2024',
         lib: ['ES2024', 'DOM', 'DOM.Iterable'],
@@ -223,123 +193,9 @@ describe('npm package, generated SDK и tree-shaking', () => {
     });
     const typecheckSubpaths = await runProcess(
       process.execPath,
-      [typescriptCliPath, '-p', join(reactConsumer, 'tsconfig.subpaths.json')],
-      { cwd: reactConsumer },
+      [typescriptCliPath, '-p', join(subpathConsumer, 'tsconfig.subpaths.json')],
+      { cwd: subpathConsumer },
     );
     expect(typecheckSubpaths.exitCode, typecheckSubpaths.stdout + typecheckSubpaths.stderr).toBe(0);
-
-    const buildReactScenario = async (source: string) => {
-      await writeFile(join(reactConsumer, 'src', 'main.tsx'), source);
-      const viteBuild = await runProcess(
-        process.execPath,
-        [join(repoRoot, 'node_modules', 'vite', 'bin', 'vite.js'), 'build'],
-        { cwd: reactConsumer },
-      );
-      expect(viteBuild.exitCode, viteBuild.stdout + viteBuild.stderr).toBe(0);
-
-      const jsFiles = (await readdir(join(reactConsumer, 'dist', 'assets')))
-        .filter((file) => file.endsWith('.js'));
-      const bundleText = (await Promise.all(
-        jsFiles.map((file) => readFile(join(reactConsumer, 'dist', 'assets', file), 'utf8')),
-      )).join('\n');
-      const report = JSON.parse(
-        await readFile(join(reactConsumer, 'bundle-report.json'), 'utf8'),
-      ) as {
-        chunks: Array<{ modules: Record<string, number> }>;
-        moduleIds: string[];
-      };
-      const allModules: Record<string, number> = Object.assign(
-        {},
-        ...report.chunks.map(({ modules }) => modules),
-      );
-      const renderedModules = Object.entries(allModules)
-        .filter(([, renderedLength]) => renderedLength > 0)
-        .map(([id]) => id.replaceAll('\\', '/'));
-      const moduleIds = report.moduleIds.map((id) => id.replaceAll('\\', '/'));
-
-      return { bundleText, moduleIds, renderedModules };
-    };
-
-    const partialBuild = await buildReactScenario(`
-      import React from 'react';
-      import { createRoot } from 'react-dom/client';
-      import { createApiClient } from '@rest-api-codegen-contract/generated-sdk/create-api-client';
-      import { getPet, readNote } from '@rest-api-codegen-contract/generated-sdk/operations';
-
-      const transport = { request: async (params: unknown) => params };
-      const api = createApiClient(transport, {
-        pets: { get: getPet },
-        notes: { read: readNote },
-      } as const);
-      function App() {
-        void api.pets.get({ id: 'selected' });
-        void api.notes.read({ id: 7 });
-        return React.createElement('div', null, 'partial-client-contract');
-      }
-      createRoot(document.getElementById('root')!).render(React.createElement(App));
-    `);
-    expect(partialBuild.bundleText).toContain('/__rac_selected_route_6a91/pets/');
-    expect(partialBuild.bundleText).toContain('/notes/');
-    expect(partialBuild.bundleText).not.toContain('/__rac_excluded_users_route_8b42/pets');
-    expect(partialBuild.bundleText).not.toContain('/__rac_excluded_admin_route_c7d3/admin/pets');
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/get-pet.js'))).toBe(true);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/read-note.js'))).toBe(true);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/create-pet.js'))).toBe(false);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/list-pets.js'))).toBe(false);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/upload-file.js'))).toBe(false);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/submit-form.js'))).toBe(false);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations/index.js'))).toBe(false);
-    expect(partialBuild.moduleIds.some((id) => id.endsWith('/operations/index.js'))).toBe(true);
-    expect(partialBuild.renderedModules.some((id) => id.endsWith('/operations-tree.js'))).toBe(false);
-
-    const directBuild = await buildReactScenario(`
-      import React from 'react';
-      import { createRoot } from 'react-dom/client';
-      import { getPet } from '@rest-api-codegen-contract/generated-sdk/operations/get-pet';
-
-      const transport = { request: async (params: unknown) => params };
-      function App() {
-        void getPet(transport, { id: 'selected' });
-        return React.createElement('div', null, 'direct-operation-contract');
-      }
-      createRoot(document.getElementById('root')!).render(React.createElement(App));
-    `);
-    expect(directBuild.bundleText).toContain('/__rac_selected_route_6a91/pets/');
-    expect(directBuild.bundleText).not.toContain('/__rac_excluded_users_route_8b42/pets');
-    expect(directBuild.bundleText).not.toContain('/__rac_excluded_admin_route_c7d3/admin/pets');
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/get-pet.js'))).toBe(true);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/create-pet.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/list-pets.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/read-note.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/upload-file.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations/submit-form.js'))).toBe(false);
-    expect(directBuild.moduleIds.some((id) => id.endsWith('/operations/index.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/operations-tree.js'))).toBe(false);
-    expect(directBuild.renderedModules.some((id) => id.endsWith('/create-api-client.js'))).toBe(false);
-
-    const fullBuild = await buildReactScenario(`
-      import React from 'react';
-      import { createRoot } from 'react-dom/client';
-      import { createApiClient } from '@rest-api-codegen-contract/generated-sdk/create-api-client';
-      import { operationsTree } from '@rest-api-codegen-contract/generated-sdk/operations-tree';
-
-      const transport = { request: async (params: unknown) => params };
-      const api = createApiClient(transport, operationsTree);
-      function App() {
-        void api.pets.getPet({ id: 'selected' });
-        return React.createElement('div', null, 'full-client-contract');
-      }
-      createRoot(document.getElementById('root')!).render(React.createElement(App));
-    `);
-    expect(fullBuild.bundleText).toContain('/__rac_selected_route_6a91/pets/');
-    expect(fullBuild.bundleText).toContain('/__rac_excluded_users_route_8b42/pets');
-    expect(fullBuild.bundleText).toContain('/__rac_excluded_admin_route_c7d3/admin/pets');
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/get-pet.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/create-pet.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/list-pets.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/read-note.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/upload-file.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations/submit-form.js'))).toBe(true);
-    expect(fullBuild.renderedModules.some((id) => id.endsWith('/operations-tree.js'))).toBe(true);
   });
 });

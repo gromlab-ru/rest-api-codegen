@@ -1,0 +1,61 @@
+{
+  "openapi": "3.0.3",
+  "info": { "title": "Runtime name collisions", "version": "1.0.0" },
+  "paths": {
+    "/collision": {
+      "post": {
+        "operationId": "request",
+        "tags": ["collisions"],
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ContentType" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiRequestClient" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/description-only": {
+      "get": {
+        "operationId": "descriptionOnly",
+        "tags": ["collisions"],
+        "description": "ContentType.Json is documentation text, not a runtime reference.",
+        "responses": {
+          "204": { "description": "No content" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiRequestClient": {
+        "type": "object",
+        "required": ["value"],
+        "properties": { "value": { "type": "string" } }
+      },
+      "ContentType": {
+        "type": "object",
+        "required": ["value"],
+        "properties": { "value": { "type": "string" } }
+      }
+    }
+  }
+}

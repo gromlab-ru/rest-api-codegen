@@ -1,85 +1,134 @@
-# Частичный API-клиент в Next.js
+# Отдельный API-клиент для каждой страницы Next.js
 
-Раздел приложения выбирает только нужные методы и не импортирует полное `operationsTree`. Для браузера и сервера создаются отдельные файлы, потому что у них разные настройки `HttpClient`.
+Next.js собирает страницы в отдельные чанки. Вместо полного `operationsTree` создадим два API-клиента с разными группами и наборами операций.
 
-## Клиентский компонент
+Операция `getPet` будет доступна обоим клиентам. Остальные операции относятся только к своей странице.
 
-`src/features/catalog/catalog-api.ts`:
+```text
+src/
+├── app/
+│   ├── catalog/
+│   │   └── page.tsx
+│   └── support/
+│       └── page.tsx
+└── infra/
+    └── pet-store-api/
+        ├── generated/          # создаётся автоматически
+        ├── http-client.ts      # общий транспорт
+        ├── catalog-api.ts      # клиент страницы catalog
+        └── support-api.ts      # клиент страницы support
+```
+
+## Общий транспорт
+
+`src/infra/pet-store-api/http-client.ts`:
 
 ```ts
-import "client-only";
+import { HttpClient } from "./generated/http-client";
 
-import { createApiClient } from "../../infra/pet-store-api/generated/create-api-client.js";
-import {
-  createPet,
-  getPet,
-  readNote,
-} from "../../infra/pet-store-api/generated/operations/index.js";
-import { httpClient } from "../../infra/pet-store-api/http-client.js";
+export const httpClient = new HttpClient({
+  baseUrl: "https://petstore.swagger.io/v2",
+});
+```
+
+## Клиент страницы catalog
+
+`src/infra/pet-store-api/catalog-api.ts`:
+
+```ts
+import { createApiClient } from "./generated/create-api-client";
+import { getInventory } from "./generated/operations/get-inventory";
+import { getPet } from "./generated/operations/get-pet";
+import { listNotes } from "./generated/operations/list-notes";
+import { listPets } from "./generated/operations/list-pets";
+import { placeOrder } from "./generated/operations/place-order";
+import { readNote } from "./generated/operations/read-note";
+import { httpClient } from "./http-client";
 
 export const catalogApi = createApiClient(httpClient, {
   pets: {
-    create: createPet,
     get: getPet,
+    list: listPets,
+  },
+  store: {
+    inventory: getInventory,
+    order: placeOrder,
   },
   notes: {
     get: readNote,
+    list: listNotes,
   },
 });
 ```
 
-Клиентский компонент импортирует `catalogApi`, а не полный `petStoreApi`:
-
-```ts
-const pet = await catalogApi.pets.get({ id: "42" });
-const createdPet = await catalogApi.pets.create({ name: "Milo" });
-const note = await catalogApi.notes.get({ id: 7 });
-```
-
-## Серверный компонент
-
-`src/features/catalog/server-catalog-api.ts`:
-
-```ts
-import "server-only";
-
-import { createApiClient } from "../../infra/pet-store-api/generated/create-api-client.js";
-import {
-  getPet,
-  readNote,
-} from "../../infra/pet-store-api/generated/operations/index.js";
-import { serverHttpClient } from "../../infra/pet-store-api/server-http-client.js";
-
-export const serverCatalogApi = createApiClient(serverHttpClient, {
-  pets: {
-    get: getPet,
-  },
-  notes: {
-    get: readNote,
-  },
-});
-```
-
-Серверный компонент использует только выбранные для раздела операции:
+`src/app/catalog/page.tsx`:
 
 ```tsx
-import { serverCatalogApi } from "../../features/catalog/server-catalog-api.js";
+"use client";
 
-export default async function CatalogPage() {
-  const [pet, note] = await Promise.all([
-    serverCatalogApi.pets.get({ id: "42" }),
-    serverCatalogApi.notes.get({ id: 7 }),
-  ]);
+import { catalogApi } from "../../infra/pet-store-api/catalog-api";
+
+export default function CatalogPage() {
+  async function handleClick() {
+    await catalogApi.pets.get({ id: "42" });
+  }
 
   return (
-    <main>
-      <h1>{pet.name}</h1>
-      <p>{note}</p>
-    </main>
+    <button onClick={handleClick}>
+      Загрузить питомца
+    </button>
   );
 }
 ```
 
-Не импортируйте `server-api.ts` полного клиента только ради `HttpClient`: этот файл уже подключает всё `operationsTree`. Частичный серверный клиент использует отдельный `server-http-client.ts` из [базового примера](./full-client.md).
+## Клиент страницы support
 
-Для cookie текущего пользователя общий `serverHttpClient` не подходит. Создайте клиент по [рецепту серверной авторизации](./ssr-cookie-auth.md), а затем привяжите к нему такое же частичное дерево.
+`src/infra/pet-store-api/support-api.ts`:
+
+```ts
+import { createApiClient } from "./generated/create-api-client";
+import { cancelOrder } from "./generated/operations/cancel-order";
+import { getOrder } from "./generated/operations/get-order";
+import { getPet } from "./generated/operations/get-pet";
+import { getUser } from "./generated/operations/get-user";
+import { updatePet } from "./generated/operations/update-pet";
+import { updateUser } from "./generated/operations/update-user";
+import { httpClient } from "./http-client";
+
+export const supportApi = createApiClient(httpClient, {
+  pets: {
+    get: getPet,
+    update: updatePet,
+  },
+  orders: {
+    get: getOrder,
+    cancel: cancelOrder,
+  },
+  users: {
+    get: getUser,
+    update: updateUser,
+  },
+});
+```
+
+`src/app/support/page.tsx`:
+
+```tsx
+"use client";
+
+import { supportApi } from "../../infra/pet-store-api/support-api";
+
+export default function SupportPage() {
+  async function handleClick() {
+    await supportApi.pets.get({ id: "42" });
+  }
+
+  return (
+    <button onClick={handleClick}>
+      Найти питомца
+    </button>
+  );
+}
+```
+
+Оба клиента используют `getPet`, поэтому Next.js может вынести её в общий чанк. Остальные операции импортируются только клиентом своей страницы. Полное дерево и невыбранные операции в чанки этих страниц не попадают.

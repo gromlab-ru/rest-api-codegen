@@ -38,7 +38,7 @@ src/
 └── infra/
     └── pet-store-api/
         ├── generated/          # создаётся автоматически
-        ├── pet-store-api.ts    # настройка API-клиента приложения
+        ├── pet-store-api.ts    # API-клиент приложения
         └── index.ts
 ```
 

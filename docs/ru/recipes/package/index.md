@@ -14,8 +14,7 @@
 ## Дополнительные возможности
 
 - [Публичные точки входа и tree-shaking](./exports-tree-shaking.md).
-- [Сгенерированный пакет с ручными исправлениями](./generated-with-corrections.md).
-- [Проверка генерации в CI](./generation-ci.md).
+- [Исправление операции внутри SDK-пакета](./generated-with-corrections.md).
 
 ## Основные правила
 

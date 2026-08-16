@@ -1,125 +1,115 @@
-# Cookie-аутентификация на сервере Next.js
+# Cookie-аутентификация в Next.js
 
-Серверный компонент может вызвать API от имени текущего пользователя, передав разрешённую `HttpOnly` cookie. Для каждого входящего запроса создаётся отдельный `HttpClient`, к которому привязывается полное дерево операций.
-
-Страница получает готовый `petStoreApi`; ей не нужно вручную передавать cookie или оборачивать каждый метод API.
-
-## Результат
+Generated-код остаётся общим, но настроенные API-клиенты разделяются по средам. Браузер отправляет cookie автоматически, а сервер Next.js пересылает cookie текущего запроса через `onRequest`.
 
 ```text
 src/
-├── app/
-│   └── pets/
-│       └── page.tsx
 └── infra/
     └── pet-store-api/
         ├── generated/
-        └── server-api.ts
+        ├── pet-store-api.ts
+        ├── pet-store-api.client.ts
+        └── pet-store-api.server.ts
 ```
 
-Серверный адрес API не должен попадать в браузерную сборку:
+## Универсальный клиент
 
-`.env.local`:
+`src/infra/pet-store-api/pet-store-api.ts` используется для публичных запросов без авторизации:
 
-```dotenv
-PET_STORE_API_URL=https://api.internal.example.com
+```ts
+import { createApiClient, HttpClient, operationsTree } from "./generated";
+
+const httpClient = new HttpClient({
+  baseUrl: "https://api.example.com",
+  credentials: "omit",
+});
+
+export const petStoreApi = createApiClient(httpClient, operationsTree);
 ```
 
-## Клиент для текущего запроса
+`credentials: "omit"` гарантирует, что клиент не отправит cookie даже при same-origin запросе.
 
-`src/infra/pet-store-api/server-api.ts`:
+## Браузерный клиент
+
+`src/infra/pet-store-api/pet-store-api.client.ts` используется в Client Components, обработчиках событий и клиентских хуках:
+
+```ts
+import "client-only";
+
+import { createApiClient, HttpClient, operationsTree } from "./generated";
+
+const httpClient = new HttpClient({
+  baseUrl: "https://api.example.com",
+  credentials: "include",
+});
+
+export const petStoreClientApi = createApiClient(httpClient, operationsTree);
+```
+
+Браузер сам хранит и отправляет cookie. JavaScript-коду не нужно читать её вручную.
+
+## Серверный клиент
+
+`src/infra/pet-store-api/pet-store-api.server.ts` используется в Server Components, Route Handlers и Server Actions:
 
 ```ts
 import "server-only";
 
 import { cookies } from "next/headers";
-import { createApiClient } from "./generated/create-api-client.js";
-import { HttpClient } from "./generated/http-client.js";
-import { operationsTree } from "./generated/operations-tree.js";
+import { createApiClient, HttpClient, operationsTree } from "./generated";
 
-function getApiBaseUrl(): string {
-  const baseUrl = process.env.PET_STORE_API_URL;
+const httpClient = new HttpClient({
+  baseUrl: "https://api.internal.example.com",
 
-  if (!baseUrl) {
-    throw new Error("Не задан PET_STORE_API_URL");
-  }
+  async onRequest(request) {
+    const session = (await cookies()).get("pet-store-session");
+    if (!session) return request;
 
-  return baseUrl;
-}
-
-export async function createPetStoreServerApi() {
-  const cookieStore = await cookies();
-  const session = cookieStore.get("pet-store-session");
-  const headers = new Headers();
-
-  if (session) {
+    const headers = new Headers(request.headers);
     headers.set(
       "Cookie",
       `${session.name}=${encodeURIComponent(session.value)}`,
     );
-  }
 
-  const httpClient = new HttpClient({
-    baseUrl: getApiBaseUrl(),
-    headers,
-    cache: "no-store",
-  });
+    return { ...request, headers };
+  },
+});
 
-  return createApiClient(httpClient, operationsTree);
-}
+export const petStoreServerApi = createApiClient(httpClient, operationsTree);
 ```
 
-Функция вызывается один раз при отрисовке страницы или макета (`layout`). Она не хранит cookie пользователя в общем состоянии процесса.
+Cookie не сохраняется в общем `HttpClient`. `onRequest` читает её из контекста текущего Next.js-запроса перед каждой операцией.
 
-`cache: "no-store"` выбран для персональных данных. Для публичных запросов можно создать отдельный серверный клиент с другой настройкой кеша.
+## Использование
 
-## Серверный компонент
-
-`src/app/pets/page.tsx`:
+Server Component импортирует серверный клиент:
 
 ```tsx
-import { createPetStoreServerApi } from "../../infra/pet-store-api/server-api.js";
+import { petStoreServerApi } from "../../infra/pet-store-api/pet-store-api.server";
 
 export default async function PetsPage() {
-  const petStoreApi = await createPetStoreServerApi();
+  const pet = await petStoreServerApi.pets.getPet({ id: "42" });
 
-  const [pet, note] = await Promise.all([
-    petStoreApi.pets.getPet({ id: "42" }),
-    petStoreApi.notes.readNote({ id: 7 }),
-  ]);
-
-  return (
-    <main>
-      <h1>{pet.name}</h1>
-      <p>{note}</p>
-    </main>
-  );
+  return <h1>{pet.name}</h1>;
 }
 ```
 
-Страница работает только с методами API. Чтение cookie, адрес сервера и настройка `HttpClient` остаются в `server-api.ts`.
+Client Component импортирует браузерный клиент:
 
-## Почему нельзя использовать общий клиент
+```tsx
+"use client";
 
-Один процесс Next.js может одновременно обслуживать разных пользователей. Если записать cookie или токен в общий `HttpClient`, данные одного запроса могут попасть в другой. Общий серверный клиент безопасен только без пользовательских данных.
+import { petStoreClientApi } from "../../infra/pet-store-api/pet-store-api.client";
 
-## Безопасная передача cookie
+export function BuyButton() {
+  async function handleClick() {
+    await petStoreClientApi.store.placeOrder({ petId: 42 });
+  }
 
-- Передавайте только cookie, которые действительно предназначены API.
-- Не используйте `cookieStore.toString()`, если приложение хранит другие конфиденциальные cookie.
-- Не принимайте `baseUrl` из параметров URL, заголовков или пользовательского ввода.
-- Серверный Fetch не переносит cookie из браузера автоматически.
-- Ответ `Set-Cookie` от API не устанавливает cookie в ответе Next.js автоматически; делайте это в обработчике маршрута (`Route Handler`) или серверном действии (`Server Action`).
-- `credentials: "include"` само по себе не переносит cookie в Node.js.
-
-## Если клиент установлен как пакет
-
-Для опубликованного пакета меняются только пути импорта:
-
-```ts
-import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
-import { HttpClient } from "@acme/pet-store-rest-sdk/http-client";
-import { operationsTree } from "@acme/pet-store-rest-sdk/operations-tree";
+  return <button onClick={handleClick}>Купить</button>;
+}
 ```
 
-Обычные клиенты для браузера и сервера описаны в [базовом примере Next.js](./full-client.md). Отправка cookie из браузера разобрана в [отдельном рецепте](./cookie-auth.md).
+Файлы `.client.ts` и `.server.ts` сами по себе не создают границу Next.js. Её обеспечивают импорты `client-only` и `server-only`.
+
+Не экспортируйте все три клиента из общего barrel-файла. Импортируйте нужный клиент напрямую, чтобы клиентский bundle не зависел от `server-only` модуля.

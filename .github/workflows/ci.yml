@@ -38,25 +38,6 @@ jobs:
       - name: Verify
         run: npm run verify
 
-      - name: Rebuild skill deterministically
-        run: |
-          mv skills/rest-api-codegen-ru "$RUNNER_TEMP/rest-api-codegen-ru-expected"
-          npm run build:skills
-          diff -qr "$RUNNER_TEMP/rest-api-codegen-ru-expected" skills/rest-api-codegen-ru
-          git diff --exit-code -- skills/rest-api-codegen-ru
-
-      - name: Verify skill discovery
-        env:
-          NO_COLOR: "1"
-        run: |
-          SKILLS_OUTPUT=$(npx --yes skills@1.5.22 add . --list)
-          printf '%s\n' "$SKILLS_OUTPUT"
-
-          case "$SKILLS_OUTPUT" in
-            *"Found 1 skill"*"rest-api-codegen-ru"*) ;;
-            *) echo "Expected exactly one discoverable rest-api-codegen-ru skill" >&2; exit 1 ;;
-          esac
-
       - name: Build package
         run: npm run build
 

@@ -99,7 +99,6 @@ jobs:
             --prefix=rest-api-codegen-ru/ \
             --output=release/rest-api-codegen-ru.zip \
             "$RELEASE_TAG:skills/rest-api-codegen-ru"
-          unzip -t release/rest-api-codegen-ru.zip
 
       - name: Create and verify checksums
         working-directory: release

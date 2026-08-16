@@ -17,43 +17,50 @@
 
 ## Agent skill
 
-В репозитории есть русскоязычный agent skill для OpenCode и Claude-compatible агентов.
+Добавьте agent skill, чтобы агент понимал архитектуру REST API Codegen и правильно использовал пакет в проекте.
 
 ```bash
-npx skills add gromlab-ru/rest-api-codegen --skill rest-api-codegen-ru
+npx skills add gromlab-ru/rest-api-codegen
 ```
 
 ## Генерация
 
-Требования: Node.js 24+, TypeScript 5+, ESM и OpenAPI/Swagger в формате JSON.
-
 ```bash
 npx --yes @gromlab/rest-api-codegen@5.2.3 \
-  --input ./openapi.json \
-  --output ./src/generated
+  --input https://petstore.swagger.io/v2/swagger.json \
+  --output ./src/infra/pet-store-api/generated
 ```
 
-`--input` принимает локальный файл или HTTP(S)-адрес. Каталог `--output` полностью управляется генератором и заменяется целиком.
+В `generated` появится результат генерации: типы, операции и HTTP-клиент.
 
-## Использование
+```text
+src/
+└── infra/
+    └── pet-store-api/
+        ├── generated/          # создаётся автоматически
+        ├── pet-store-api.ts    # настройка API-клиента приложения
+        └── index.ts
+```
+
+## Создание API-клиента
+
+`src/infra/pet-store-api/pet-store-api.ts`:
 
 ```ts
-import {
-  createApiClient,
-  HttpClient,
-  operationsTree,
-} from "./generated/index.js";
+import { createApiClient, HttpClient, operationsTree } from "./generated";
 
-// Настраиваем общий HTTP-транспорт для всех операций.
-const httpClient = new HttpClient({
-  baseUrl: "https://api.example.com",
+// Настраиваем общий HTTP-транспорт.
+export const httpClient = new HttpClient({
+  baseUrl: "https://petstore.swagger.io/v2",
 });
 
-// Связываем транспорт с полным сгенерированным деревом API.
-export const api = createApiClient(httpClient, operationsTree);
+// Создаём API-клиент.
+export const petStoreApi = createApiClient(httpClient, operationsTree);
+```
 
-// Вызываем операцию через готовый доменный метод.
-const pet = await api.pets.getPet({ id: "42" });
+## Использование
+```ts
+const pet = await petStoreApi.pets.getPet({ id: "42" });
 ```
 
 Имена групп, операций и их аргументы определяются OpenAPI-спецификацией.

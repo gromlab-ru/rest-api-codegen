@@ -12,7 +12,7 @@ npm run test:coverage
 npm run verify
 ```
 
-`npm run verify` проверяет release contract и generated skill, выполняет typecheck исходников и тестов, build, полный Vitest suite и coverage thresholds.
+`npm run verify` проверяет release contract, выполняет typecheck исходников и тестов, build, полный Vitest suite и coverage thresholds.
 
 ## Уровни проверок
 

@@ -1,25 +1,24 @@
-# Сгенерированный пакет с ручными исправлениями
+# Исправление операции внутри SDK-пакета
 
-Пакет можно генерировать автоматически и при этом временно исправлять отдельные операции вручную. Для этого CLI пишет только в `src/generated`, а файлы уровнем выше задают публичные экспорты и итоговое `operationsTree`.
+Если REST-клиент поставляется как SDK, исправление операции выполняется внутри SDK-пакета. Приложения получают исправление после обновления версии пакета и не создают собственные патчи.
 
-Сгенерированные файлы не редактируются. После исправления OpenAPI ручная замена удаляется, пакет генерируется заново и выпускается новой версией.
-
-## Структура
+`generated/` полностью принадлежит генератору. `overrides/` хранит ручной публичный слой и не изменяется при повторной генерации.
 
 ```text
-src/
-├── generated/                  # только rest-api-codegen
-├── custom-operations/
-│   └── get-pet-corrected.ts
-├── operations/
-│   ├── get-pet.ts              # публичный путь исправленной операции
-│   └── index.ts                # общий экспорт операций
-├── index.ts                    # корневая точка входа
-└── operations-tree.ts          # исправленное полное дерево
-package.json
+pet-store-rest-sdk/
+├── src/
+│   ├── generated/                     # полностью заменяется генератором
+│   └── overrides/                     # ручной публичный слой SDK
+│       ├── operations/
+│       │   ├── get-pet.ts             # исправленная операция
+│       │   └── index.ts               # generated + overrides
+│       ├── data-contracts.ts           # исправленные типы
+│       ├── index.ts                   # корневая точка входа
+│       └── operations-tree.ts         # generated tree + overrides
+└── package.json
 ```
 
-Команда генерации направлена во вложенный каталог:
+Генератор пишет только в `src/generated`:
 
 ```json
 {
@@ -29,135 +28,94 @@ package.json
 }
 ```
 
+## Исправленный тип
+
+`src/overrides/data-contracts.ts` переэкспортирует generated-типы и явно заменяет `Pet`:
+
+```ts
+import type { Pet as GeneratedPet } from "../generated/data-contracts.js";
+
+export type * from "../generated/data-contracts.js";
+
+export type Pet = Omit<GeneratedPet, "name"> & {
+  displayName: string;
+};
+```
+
 ## Исправленная операция
 
-`src/custom-operations/get-pet-corrected.ts`:
+`src/overrides/operations/get-pet.ts`:
 
 ```ts
-import type {
-  ApiRequestClient,
-  RequestParams,
-} from "../generated/http-client.js";
+import type { ApiRequestClient, RequestParams } from "../../generated/http-client.js";
+import type { Pet } from "../data-contracts.js";
 
-export interface CorrectPet {
-  id: string;
-  displayName: string;
-}
-
-export interface CorrectProblem {
-  message: string;
-}
-
-export const getPetCorrected = (
-  http: ApiRequestClient,
-  input: { id: string; verbose?: boolean },
+export function getPet(
+  httpClient: ApiRequestClient,
+  { id }: { id: string },
   params: RequestParams = {},
-) => http.request<CorrectPet, CorrectProblem>({
-  path: `/pets/${encodeURIComponent(input.id)}`,
-  method: "GET",
-  query: { verbose: input.verbose },
-  format: "json",
-  ...params,
-  secure: true,
-});
+) {
+  return httpClient.request<Pet>({
+    path: `/pets/${encodeURIComponent(id)}`,
+    method: "GET",
+    format: "json",
+    ...params,
+    secure: true,
+  });
+}
 ```
 
-Типы `HttpClient` импортируются из сгенерированной части того же пакета. Благодаря этому все операции используют одну реализацию клиента и один класс `ApiError`.
+Исправленная операция сразу использует публичное имя `getPet`. Отдельная папка `custom-operations` не нужна.
 
-## Управляемые экспорты операций
+## Публичный API пакета
 
-`src/operations/get-pet.ts` сохраняет прежнее публичное имя операции:
-
-```ts
-export {
-  getPetCorrected as getPet,
-} from "../custom-operations/get-pet-corrected.js";
-export type {
-  CorrectPet,
-  CorrectProblem,
-} from "../custom-operations/get-pet-corrected.js";
-```
-
-`src/operations/index.ts`:
+`src/overrides/operations/index.ts` экспортирует остальные generated-операции и явно заменяет `getPet`:
 
 ```ts
-export * from "../generated/operations/index.js";
+export * from "../../generated/operations/index.js";
 export { getPet } from "./get-pet.js";
 ```
 
-Явный экспорт `getPet` заменяет одноимённый экспорт из сгенерированного файла. Остальные операции продолжают публиковаться без дополнительных обёрток.
-
-## Исправленное полное дерево
-
-`src/operations-tree.ts`:
+`src/overrides/operations-tree.ts` подставляет исправленную операцию в полное дерево:
 
 ```ts
-import { operationsTree as generatedOperationsTree } from "./generated/operations-tree.js";
-import { getPetCorrected } from "./custom-operations/get-pet-corrected.js";
+import { operationsTree as generatedOperationsTree } from "../generated/operations-tree.js";
+import { getPet } from "./operations/get-pet.js";
 
 export const operationsTree = {
   ...generatedOperationsTree,
   pets: {
     ...generatedOperationsTree.pets,
-    getPet: getPetCorrected,
+    getPet,
   },
 };
 
 export type OperationsTree = typeof operationsTree;
 ```
 
-## Управляемая корневая точка входа
-
-`src/index.ts` повторяет публичные экспорты сгенерированного клиента, но берёт операции и дерево из управляемых файлов:
+`src/overrides/index.ts` сохраняет generated API, но явно заменяет публичные `getPet`, `operations` и `operationsTree`:
 
 ```ts
-export { createApiClient } from "./generated/create-api-client.js";
-export type {
-  ApiOperation,
-  ApiTree,
-  BoundApi,
-} from "./generated/create-api-client.js";
-export {
-  ApiError,
-  ContentType,
-  HttpClient,
-} from "./generated/http-client.js";
-export type {
-  ApiConfig,
-  ApiRequestClient,
-  CancelToken,
-  ErrorInterceptor,
-  FetchLike,
-  FullRequestParams,
-  HttpResponse,
-  ParamsSerializer,
-  QueryParamsType,
-  RequestContext,
-  RequestInterceptor,
-  RequestParams,
-  ResponseFormat,
-  ResponseInterceptor,
-  ResponseParser,
-} from "./generated/http-client.js";
-export type * from "./generated/data-contracts.js";
+export * from "../generated/index.js";
+export type { Pet } from "./data-contracts.js";
+export { getPet } from "./operations/get-pet.js";
+export * as operations from "./operations/index.js";
 export { operationsTree } from "./operations-tree.js";
 export type { OperationsTree } from "./operations-tree.js";
-export * as operations from "./operations/index.js";
-export * from "./operations/index.js";
 ```
 
-Корневая точка входа не публикует ошибочное сгенерированное дерево: операции всегда проходят через управляемые файлы.
+При повторной генерации эти файлы не меняются. Обновляется только содержимое `src/generated`.
 
 ## Точки входа пакета
 
-Точный путь исправленной операции имеет приоритет над общим шаблоном для остальных сгенерированных операций:
+Aggregate-точки ведут в `overrides`, а неизменённые служебные модули и операции остаются в `generated`:
 
 ```json
 {
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./dist/overrides/index.d.ts",
+      "import": "./dist/overrides/index.js"
     },
     "./create-api-client": {
       "types": "./dist/generated/create-api-client.d.ts",
@@ -167,64 +125,67 @@ export * from "./operations/index.js";
       "types": "./dist/generated/http-client.d.ts",
       "import": "./dist/generated/http-client.js"
     },
+    "./data-contracts": {
+      "types": "./dist/overrides/data-contracts.d.ts",
+      "import": "./dist/overrides/data-contracts.js"
+    },
     "./operations": {
-      "types": "./dist/operations/index.d.ts",
-      "import": "./dist/operations/index.js"
+      "types": "./dist/overrides/operations/index.d.ts",
+      "import": "./dist/overrides/operations/index.js"
     },
     "./operations/get-pet": {
-      "types": "./dist/operations/get-pet.d.ts",
-      "import": "./dist/operations/get-pet.js"
+      "types": "./dist/overrides/operations/get-pet.d.ts",
+      "import": "./dist/overrides/operations/get-pet.js"
     },
     "./operations/*": {
       "types": "./dist/generated/operations/*.d.ts",
       "import": "./dist/generated/operations/*.js"
     },
     "./operations-tree": {
-      "types": "./dist/operations-tree.d.ts",
-      "import": "./dist/operations-tree.js"
+      "types": "./dist/overrides/operations-tree.d.ts",
+      "import": "./dist/overrides/operations-tree.js"
     }
   }
 }
 ```
 
-## Использование пакета
+`exports` не умеет автоматически искать файл сначала в `overrides`, а затем в `generated`. Поэтому каждая исправленная или добавленная операция получает точный публичный путь. Точный `./operations/get-pet` имеет приоритет над шаблоном `./operations/*`.
 
-Полный клиент получает исправленное дерево:
+## Использование SDK
 
-```ts
-import { createApiClient } from "@acme/pet-store-rest-sdk/create-api-client";
-import { operationsTree } from "@acme/pet-store-rest-sdk/operations-tree";
-import { httpClient } from "./http-client.js";
-
-export const petStoreApi = createApiClient(
-  httpClient,
-  operationsTree,
-);
-```
-
-Частичный клиент получает исправленную `getPet` из общего экспорта операций:
+Root import получает исправленное дерево и операцию:
 
 ```ts
-import { getPet, readNote } from "@acme/pet-store-rest-sdk/operations";
+import { createApiClient, HttpClient, operationsTree } from "@acme/pet-store-rest-sdk";
+
+const httpClient = new HttpClient({
+  baseUrl: "https://api.example.com",
+});
+
+const petStoreApi = createApiClient(httpClient, operationsTree);
+const pet = await petStoreApi.pets.getPet({ id: "42" });
 ```
 
-Отдельный импорт также получает исправленную версию:
+Barrel и прямой импорт также возвращают исправленную `getPet`:
 
 ```ts
-import { getPet } from "@acme/pet-store-rest-sdk/operations/get-pet";
-
-const pet = await getPet(httpClient, { id: "a/b" });
+import { getPet } from "@acme/pet-store-rest-sdk/operations";
+import { getPet as getPetDirect } from "@acme/pet-store-rest-sdk/operations/get-pet";
 ```
 
-## Возврат к сгенерированной операции
+Исправленный тип доступен из root import и отдельной точки входа:
 
-После исправления OpenAPI:
+```ts
+import type { Pet } from "@acme/pet-store-rest-sdk";
+import type { Pet as PetContract } from "@acme/pet-store-rest-sdk/data-contracts";
+```
 
-1. Обновите OpenAPI и заново создайте `src/generated`.
-2. Проверьте новую сгенерированную операцию контрактным тестом.
-3. Удалите `get-pet-corrected.ts` и явную замену из общего экспорта.
-4. Верните сгенерированную операцию в дерево.
-5. Удалите отдельную запись `./operations/get-pet` из `exports`.
-6. Выпустите новую версию пакета и удалите тесты временного исправления.
+Потребитель SDK не знает, была операция сгенерирована или исправлена вручную.
 
-Исправления внутри приложения показаны отдельно для [React + Vite](../react-vite/broken-endpoints.md) и [Next.js](../nextjs/broken-endpoints.md).
+Публичный override типа не изменяет сигнатуры generated-операций, которые импортируют исходный тип напрямую из `generated/data-contracts`. Если неправильный тип используется в нескольких операциях, каждую такую операцию также нужно исправить в `overrides/operations`.
+
+## Удаление исправления
+
+После обновления OpenAPI удалите исправления из `overrides/data-contracts.ts` и `overrides/operations/get-pet.ts` вместе со связанными явными экспортами. Затем верните generated-операцию в `operationsTree`, удалите точные пути исправлений из `package.json` и выпустите новую версию SDK. Код приложений-потребителей изменять не нужно.
+
+Исправление внутри приложения показано в [React-рецепте](../react/broken-endpoints.md).

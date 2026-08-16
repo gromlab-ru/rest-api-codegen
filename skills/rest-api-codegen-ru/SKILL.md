@@ -1,219 +1,354 @@
 ---
 name: rest-api-codegen-ru
-description: Использовать при настройке TypeScript REST-клиента или SDK с @gromlab/rest-api-codegen, OpenAPI, Swagger, HttpClient, createApiClient, operationsTree, ручными operations, workspace/монорепозиторием, React + Vite или Next.js; skill исследует проект, выбирает архитектуру, готовит окружение, реализует клиент и проверяет интеграцию.
+description: Использовать при создании и организации TypeScript REST API-клиентов с @gromlab/rest-api-codegen, OpenAPI, ручными операциями, React, Next.js, SSR, монорепозиториями и SDK-пакетами; skill выбирает архитектуру, реализует клиент и применяет корректные REST-практики.
 license: MIT
-compatibility: "OpenCode и Claude-compatible agents; для CLI требуется Node.js 24+"
+compatibility: "OpenCode и Agent Skills-compatible агенты; для CLI требуется Node.js 24+"
 metadata:
-  language: ru
+  language: "ru"
   package: "@gromlab/rest-api-codegen"
   package-version: "5.2.3"
 ---
 
-# REST API Codegen Expert
+# REST API Codegen
 
-## Задача
+## Роль
 
-Доводи клиентскую REST-интеграцию до рабочего кода. Не пересказывай документацию вместо работы. Исследуй repository, выбери подход, подготовь environment, внеси изменения и выполни доступные проверки. Если пользователь просит только объяснение или план, не изменяй файлы.
+Организуй работу с REST API в TypeScript-проекте через `@gromlab/rest-api-codegen`. Не ограничивайся пересказом API библиотеки: исследуй проект, выбери подходящую архитектуру, создай клиент, подключи его к приложению и проверь результат.
 
-Skill отвечает за TypeScript REST-клиенты и SDK. Он не генерирует серверную реализацию и не заменяет проектирование server-side API.
+Если пользователь просит реализацию, выполняй её полностью. Если пользователь просит только объяснение, сравнение или план, не изменяй файлы.
+
+Не предлагай Axios, другой генератор или набор ручных `fetch`-вызовов как основной подход. Сгенерированные и ручные операции должны использовать единый контракт `HttpClient` и `createApiClient`.
+
+Skill отвечает за клиентскую REST-интеграцию. Не проектируй серверную реализацию API и не выдумывай отсутствующий wire contract.
 
 ## Источники истины
 
-Используй источники в таком порядке:
+Используй источники в следующем порядке:
 
-1. `package.json`, workspace config, lockfile и `tsconfig` текущего проекта.
-2. OpenAPI и существующий API-код текущего проекта.
-3. Freshly generated output и результаты typecheck/tests.
-4. Подходящий документ из `references/`.
+1. Структура, package manager, конфигурация TypeScript и соглашения текущего проекта.
+2. OpenAPI, существующие REST-клиенты и фактический API-код проекта.
+3. Реальные exports и сигнатуры свежего generated-кода.
+4. Связанный документ из `references/`.
 5. Общие предположения.
 
-Если работа ведётся в repository самого `rest-api-codegen`, реализация и tests важнее документационного примера. Не считай `dist/`, `coverage/` и `playground/generated/` актуальным source.
+Документация содержит примеры, а не обязательную структуру любого проекта. Не копируй пути, URL, имена операций и способы хранения конфигурации без проверки текущего repository.
 
-Не загружай все references заранее. Сначала выбери ветку решения, затем прочитай только связанные документы.
+Не загружай все references заранее. Сначала выбери сценарий, затем прочитай только нужные документы.
 
 ## Обязательная диагностика
 
 До изменения файлов определи:
 
-- package manager по lockfile и `packageManager`;
-- Node.js и TypeScript versions, module system и compiler options;
+- package manager по `packageManager` и lockfile;
 - является ли repository монорепозиторием или workspace;
-- принятые package locations, scopes, scripts и naming conventions;
-- наличие локальной или remote OpenAPI/Swagger specification;
-- JSON это или YAML, доступна ли remote specification без credentials;
-- browser, Node.js или SSR runtime;
-- base URL, auth mechanism и error contract;
-- нужен весь API, доменная группа или одна operation;
-- есть ли существующий generated output и ручные файлы внутри него.
+- существующие места для API, services, infrastructure и shared packages;
+- SPA, Next.js, SSR, Node.js library или другой runtime;
+- TypeScript version, module system и module resolution;
+- наличие OpenAPI/Swagger и её формат;
+- доступна ли remote-спецификация без credentials;
+- существует ли уже generated-клиент или общий SDK;
+- сколько приложений и репозиториев используют этот REST API;
+- нужен полный API, несколько групп или одна операция;
+- base URL, способ авторизации и контракт ошибок;
+- принятые команды typecheck, build и tests.
 
-Сначала ищи ответы в проекте. Спрашивай пользователя только о неизвестных данных, без которых нельзя безопасно определить wire contract, доступ к specification, package boundary или требуемую API-поверхность consumer.
+Сначала ищи ответы в проекте. Спрашивай пользователя только о данных, без которых нельзя определить API-контракт, получить спецификацию, выбрать package boundary или безопасно настроить авторизацию.
 
-## Выбор архитектуры
+## Выбор источника операций
 
-Применяй решения последовательно: topology, источник operations, способ потребления.
-
-### 1. Topology
-
-**Если repository является монорепозиторием, всегда создавай отдельный workspace SDK package.** Не оставляй REST-клиент внутри одного приложения, даже если consumer пока один.
-
-CLI генерирует только TypeScript source. `package.json`, `tsconfig.json`, workspace registration, build scripts и package `exports` создаёт агент.
-
-Если repository не является монорепозиторием, размещай API-модуль внутри приложения, если пользователь явно не запросил публикуемый npm package.
-
-### 2. Источник operations
-
-| Состояние contract | Решение |
+| Состояние API-контракта | Решение |
 | --- | --- |
-| Есть актуальная OpenAPI JSON | Сгенерировать SDK зафиксированной версией CLI |
-| Есть OpenAPI YAML | Получить воспроизводимый локальный JSON по правилам ниже, затем генерировать |
-| OpenAPI нет | Написать contracts и transport-first operations вручную |
-| Отдельный endpoint OpenAPI неверен | Сначала исправить specification; custom operation использовать только если source временно нельзя изменить |
+| Есть актуальная OpenAPI/Swagger JSON | Сгенерировать клиент зафиксированной версией CLI |
+| Есть OpenAPI YAML | Использовать существующий project tool для bundle/conversion в JSON; если его нет, согласовать добавление инструмента |
+| OpenAPI отсутствует | Установить пакет и создать типы и операции вручную |
+| Отдельные методы описаны неверно | Сгенерировать доступный контракт и добавить overrides вне generated-каталога |
+| Существует готовый SDK | Подключить его, не создавать второй клиент того же API |
 
-Для YAML сначала ищи существующий pinned OpenAPI bundler и project config. Если есть external `$ref` или их отсутствие не доказано, нужен bundle в самодостаточный JSON, а не простое синтаксическое преобразование. Если подходящего toolchain нет, запроси разрешение добавить version-pinned bundler либо попроси готовый bundled JSON. Не используй случайную transitive dependency. После conversion проверь JSON parse, поля `openapi`/`swagger`, `info`, `paths`, затем сгенерируй SDK во временный output и выполни typecheck до замены рабочего результата.
+Не выдумывай типы ручной операции по названию endpoint. Получи schema, существующий код, пример ответа или подтверждение пользователя. Если структура неизвестна, используй `unknown` либо запроси контракт.
 
-Для protected remote specification сначала определи auth scheme, разрешённый источник credentials и политику хранения файла. Используй существующий downloader с non-2xx failure, timeout и secret из environment/secret store; не помещай credential в repository, command output или generated script. Проверь, что ответ является ожидаемым JSON document с минимальной OpenAPI structure. Только затем передавай локальный файл CLI. Если способ доступа неизвестен, остановись и задай один конкретный вопрос. Не выдумывай CLI flags для headers, timeout или auth.
+CLI принимает JSON. Не передавай ему YAML и не придумывай параметры для headers, auth, timeout или retry. Закрытую спецификацию сначала скачай существующим механизмом проекта без вывода credentials, затем передай локальный JSON.
 
-### 3. Способ потребления
+## Выбор размещения
 
-| Потребность consumer | Решение |
+### Один SPA-проект
+
+Сначала найди существующее место для инфраструктурного кода, например `src/api`, `src/shared/api`, `src/services`, `src/lib` или `src/infra`. Следуй соглашениям проекта.
+
+Перед созданием клиента прочитай [базовый React-рецепт](references/recipes/react/full-client.md).
+
+Если подходящей структуры нет, предложи каталог наподобие:
+
+```text
+src/infra/<api>/
+├── generated/
+└── <api>.ts
+```
+
+Не создавай `src/infra` автоматически, если repository уже использует другую понятную структуру.
+
+### Монорепозиторий
+
+По умолчанию рекомендуй отдельный workspace SDK, особенно если API используется несколькими приложениями. Следуй существующему workspace manager, package naming и build order.
+
+Перед созданием workspace package прочитай [рецепт SDK в монорепозитории](references/recipes/package/monorepo-package.md).
+
+Это рекомендация, а не безусловное правило. Если пользователь выбирает локальный клиент или структура монорепозитория подсказывает другое решение, объясни компромисс и следуй принятому решению.
+
+### Несколько независимых проектов
+
+Если один REST API используется несколькими репозиториями, предложи вынести типы и операции в общий npm SDK. Объясни преимущества и стоимость отдельного пакета: единые контракты и исправления, но собственные versioning, build и release.
+
+Для оценки и реализации решения прочитай [рецепт отдельного npm SDK](references/recipes/package/npm-package.md).
+
+Не создавай и не публикуй npm-пакет без согласия пользователя. Никогда не выполняй `npm publish` без отдельного явного запроса.
+
+SDK хранит типы, операции, `HttpClient`, `createApiClient`, `operationsTree` и overrides. Конкретные base URL, cookie, JWT и экземпляры настроенных клиентов остаются в приложениях-потребителях.
+
+## Выбор размера клиента
+
+| Потребность | Решение |
 | --- | --- |
-| Один endpoint | Прямой import и вызов operation с общим transport |
-| Связанная группа endpoints | Локальное частичное дерево и `createApiClient` |
-| Нужен весь или почти весь API | Generated `operationsTree` и полный client |
+| Нужна большая часть API | `createApiClient(httpClient, operationsTree)` |
+| Странице или домену нужны отдельные группы | Собрать собственное дерево только из выбранных операций |
+| Нужна одна операция | Импортировать операцию и передать ей `HttpClient` напрямую |
 
-Это не режимы генератора. CLI всегда создаёт полный generated SDK. «Минимальный» вариант означает прямое использование одной operation или небольшой ручной модуль, а не `--mode` или partial generation.
+Не импортируй `operationsTree` в небольшой page/domain client. Импортируй операции по прямым путям, чтобы остальные operation-модули не попадали в его dependency graph.
 
-## Ветка: workspace SDK
+Одну операцию можно использовать в нескольких клиентах. Каждый клиент может иметь собственные группы, имена методов и транспорт.
 
-Прочитай [рецепт монорепозитория](references/recipes/package/monorepo-package.md), [package exports](references/recipes/package/exports-tree-shaking.md) и при необходимости [публикуемый npm package](references/recipes/package/npm-package.md).
+## Generated-клиент
 
-Соблюдай следующий contract:
+Перед генерацией прочитай [CLI и структуру generated-клиента](references/cli.md).
 
-1. Следуй существующему workspace manager и package naming проекта.
-2. Создай отдельный package наподобие `packages/<api-name>-rest-sdk`.
-3. Используй ESM, strict TypeScript, `NodeNext`, declarations и Fetch typings.
-4. Публикуй compiled `dist`, а не raw TypeScript.
-5. Определи явные `exports` для root, transport, operations и operation subpaths.
-6. Ставь `sideEffects: false` только при отсутствии import-time side effects.
-7. Разделяй `generate` и `build`; generation обновляет source, build компилирует существующий source.
-8. Настрой build order так, чтобы SDK собирался раньше consumers.
-
-При актуальной OpenAPI pure generated package может отдавать генератору весь `src`. Если package содержит wrappers или custom operations, генерируй в `src/generated`, а ручной код храни рядом.
-
-При отсутствии OpenAPI package зависит от `@gromlab/rest-api-codegen` как runtime library. Создай public facades `src/http-client.ts` и `src/create-api-client.ts`, которые re-export соответствующие values/types runtime package; SDK не должен содержать configured base URL, token или consumer-specific singleton. Экспортируй manual contracts, operations и `operationsTree` через те же package subpaths, что будет использовать generated SDK. Подробный contract находится в рецепте монорепозитория.
-
-## Ветка: generated SDK
-
-Прочитай [CLI и устройство generated SDK](references/cli.md), затем подходящий framework/package recipe.
-
-Поддерживаемый вызов имеет только два обязательных параметра:
+Поддерживаемая команда содержит только input и output:
 
 ```bash
 npx --yes @gromlab/rest-api-codegen@5.2.3 \
-  --input ./openapi/api.openapi.json \
-  --output ./src/infra/api/generated
+  --input <openapi.json-or-url> \
+  --output <generated-directory>
 ```
 
-Команда показана для npm. В проекте с другим package manager используй его one-shot equivalent и не создавай второй lockfile; package name, зафиксированная version и CLI arguments остаются теми же.
+Для другого package manager используй его one-shot equivalent, не создавая второй lockfile.
 
-Правила:
+Правила generated-кода:
 
-- input является OpenAPI/Swagger JSON;
-- версия CLI фиксируется в script, не используй `latest`;
-- output является отдельным каталогом, целиком принадлежащим генератору;
-- не выбирай root repository, общий `src` приложения или каталог с ручными файлами;
-- не запускай конкурентные generation processes в один output;
+- output является отдельным каталогом и полностью принадлежит генератору;
+- ручной код хранится рядом, но не внутри generated;
 - generated-файлы не редактируются и не переименовываются;
-- transport configuration хранится вне generated output;
-- после generation читай фактические exports, operation names и signatures;
-- добавь воспроизводимый script и проверку generated diff в CI.
+- добавь воспроизводимый project script с зафиксированной версией CLI;
+- после генерации прочитай реальные exports, группы, имена операций и аргументы;
+- не используй несуществующие `--mode`, `--name`, `--single-file`, `--swr` или config file;
+- не импортируй внутренний `generate()` из `dist` как public API.
 
-Не используй `--mode`, `--name`, `--single-file`, `--swr` или config file: такой поверхности у CLI нет. Не импортируй внутренний `generate()` из `dist` как public API.
+В приложениях с bundler используй extensionless relative imports. `.js`-расширения в TypeScript source используй только там, где этого требует NodeNext SDK package.
 
-## Ветка: ручной клиент
+Если полный клиент и транспорт используются вместе, храни их в одном файле. Выноси транспорт отдельно только когда несколько клиентов должны разделять его или runtime требует разных transport policies.
 
-Прочитай [`HttpClient`](references/http-client.md) и подходящий ручной сценарий: [React + Vite](references/recipes/react-vite/manual-client.md), [Next.js](references/recipes/nextjs/manual-client.md) или [workspace SDK](references/recipes/package/monorepo-package.md).
+## Ручной клиент
 
-Установи `@gromlab/rest-api-codegen` как runtime dependency. Повторяй contract generated operations:
+Перед реализацией прочитай [рецепт ручного клиента без OpenAPI](references/recipes/react/manual-client.md).
 
-- `ApiRequestClient` является первым аргументом;
-- typed endpoint input/body следуют после transport;
-- `RequestParams = {}` является последним аргументом;
-- operation вызывает `http.request<Success, Error>`;
-- path parameters кодируются через `encodeURIComponent`;
-- явно задаются method, query, body, request `type` и response `format`;
-- обязательный `secure: true` располагается после `...params`, чтобы caller не мог снять protection;
-- один configured `HttpClient` переиспользуется всеми operations.
+Если OpenAPI отсутствует, установи `@gromlab/rest-api-codegen` как runtime dependency и создай операции того же формата, что generated-операции:
 
-Не придумывай response types по названию endpoint. Получи schema, примеры или подтверждение пользователя. Если media type известен, но schema отсутствует, используй `unknown` и не обращайся к полям результата. Если consumer требует структуру response, остановись и запроси contract вместо создания ложного type.
+```ts
+export function operation(
+  httpClient: ApiRequestClient,
+  input: OperationInput,
+  params: RequestParams = {},
+) {
+  return httpClient.request<Result, ApiProblem>({
+    path: "/resource",
+    method: "GET",
+    format: "json",
+    ...params,
+  });
+}
+```
 
-Тестируй operation через fake `ApiRequestClient`, проверяя весь request metadata без реальной сети.
+Определи path, method, query, body, content type, response format и security marker из реального контракта. Кодируй path parameters через `encodeURIComponent`.
 
-## Ветка: custom operation
+Собери ручные операции через `createApiClient`. Когда появится OpenAPI, замени их generated-операциями, сохраняя transport и публичную структуру клиента.
 
-Прочитай подходящий сценарий исправления: [React + Vite](references/recipes/react-vite/broken-endpoints.md), [Next.js](references/recipes/nextjs/broken-endpoints.md) или [SDK package](references/recipes/package/generated-with-corrections.md).
+## Исправления поверх OpenAPI
 
-Сначала проверь, можно ли исправить каноническую OpenAPI сейчас. Если можно, измени specification, регенерируй SDK и не создавай workaround. Следующие правила применяются только когда source contract временно недоступен для исправления:
+Для приложения прочитай [исправление generated-операции](references/recipes/react/broken-endpoints.md). Для SDK прочитай [исправление операции внутри пакета](references/recipes/package/generated-with-corrections.md).
 
-- не изменяй generated output;
-- храни исправление в `custom-operations/` или другом ручном модуле;
-- импортируй `ApiRequestClient`, `RequestParams`, `ContentType` и `ApiError` из того же generated SDK;
-- замени только ошибочный leaf в пользовательском дереве;
-- не импортируй полный `operationsTree` ради одной точечной operation;
-- добавь metadata test и условие удаления workaround после исправления OpenAPI.
+Если спецификация содержит ошибку, не редактируй generated-файл. Создай исправленную операцию вне output и подставь её в пользовательское дерево.
 
-Не смешивай без необходимости generated runtime с runtime root package: разные копии `ApiError` имеют разную class identity.
+В приложении храни исправление рядом с generated-кодом. В SDK используй стабильный `overrides/` слой, на который направлены root exports, operations barrel, operations tree и точные operation subpaths.
 
-## Transport и REST policy
+Если исправляется публичный тип, добавь `overrides/data-contracts`. Помни: публичный re-export типа не меняет сигнатуры generated-операций, которые импортируют исходный тип напрямую. Исправь каждую затронутую операцию.
 
-Всегда прочитай [`HttpClient`](references/http-client.md) и подходящий recipe, если задача затрагивает auth, errors, retry, uploads, pagination, caching или SSR.
+После исправления OpenAPI удали override и верни generated-операцию, не меняя вызовы consumers.
 
-Проверяй:
+## Browser, Next.js и SSR
 
-- корректное соединение base URL и path;
-- path encoding и фактический query wire format;
-- `Content-Type`, `Accept` и response parser;
-- success/error status codes и responses без body;
+Generated-типы и операции универсальны. Настроенные клиенты разделяй только когда runtime требует разных URL, credentials или request context.
+
+### Browser
+
+Выбери связанный пример в [карте React-рецептов](references/recipes/react/index.md) и прочитай его до изменения auth или data-fetching кода.
+
+Для cookie-аутентификации браузерного клиента используй `credentials: "include"`. Браузер сам хранит и отправляет cookie.
+
+Для JWT добавляй Authorization через `onRequest`, читая токен перед каждым защищённым вызовом. Не копируй работу с токеном в компоненты и операции.
+
+Клиентские запросы запускай из event handlers, effects или data-fetching hooks. Не выполняй запрос во время render Client Component.
+
+### Next.js page clients
+
+Перед разделением операций прочитай [рецепт отдельных клиентов для страниц](references/recipes/nextjs/partial-client.md).
+
+Если страницам нужны разные наборы операций, создай отдельный API client для каждой страницы и общий transport. Не подключай полное дерево. Прямые operation imports позволяют Next.js собрать route-specific dependency graph.
+
+### Cookie-аутентификация в Next.js
+
+Перед реализацией прочитай [рецепт cookie-аутентификации в browser и SSR](references/recipes/nextjs/ssr-cookie-auth.md).
+
+Различай три сценария:
+
+- универсальный публичный клиент с `credentials: "omit"`;
+- browser client с `client-only` и `credentials: "include"`;
+- server client с `server-only` и `onRequest`, читающим `cookies()` текущего запроса.
+
+Не сохраняй пользовательскую cookie в глобальных headers. Глобальный server `HttpClient` безопасен, если `onRequest` читает request-local cookie перед каждой операцией и не изменяет общее пользовательское состояние.
+
+Не экспортируй browser и server clients из общего barrel: клиентский module graph не должен зависеть от `server-only`.
+
+Server Component получает SSR-данные через server client. Client Component использует browser client в событиях или SWR. Для SSR + SWR передай начальные serializable данные из Server Component как `fallbackData`.
+
+## HTTP и REST policy
+
+Перед изменением transport hooks, сериализации, retry или cancellation прочитай справочник [`HttpClient`](references/http-client.md).
+
+Храни общие правила запросов в одном `HttpClient` для выбранного runtime:
+
+- base URL и общие headers;
+- авторизацию через `onRequest`;
+- обработку и нормализацию ошибок;
+- ограниченный retry через `onError` и `context.retry()`;
 - timeout и cancellation;
-- ограниченный retry только для допустимых операций;
-- `Retry-After`, backoff и idempotency keys;
-- один и тот же idempotency key и неизменный body во всех попытках изменяющего запроса;
-- отсутствие credentials и request bodies в logs/telemetry;
-- runtime validation на недоверенной границе, если она требуется;
-- pagination, caching и concurrency contract сервера.
+- custom Fetch, query serializer или response parser только при реальной необходимости.
 
-`secure: true` является marker, а не готовой авторизацией. Реализуй credentials через `onRequest`.
+Не повторяй изменяющий запрос без доказанной идемпотентности или idempotency key. Ограничивай число retry через `context.retryCount`.
 
-Не генерируй новый idempotency key внутри `onRequest`: `context.retry()` запускает interceptor повторно. Создай key до первой попытки, передай его в исходных request params и используй только при подтверждённой server-side deduplication policy.
+Не задавай `Content-Type` для `FormData` вручную. Проверяй реальный wire format query, тела и ответа. Не считай TypeScript-типы runtime-валидацией.
 
-Для SSR создавай отдельный authenticated transport на каждый входящий request. Не сохраняй пользовательские tokens/cookies в module-level singleton и не пересылай все входящие headers без allowlist.
+Не помещай secrets в browser environment, generated-код, URL, логи или документационные примеры.
 
-## Framework routing
+## SDK package
 
-После выбора core architecture загружай только релевантные recipes:
+Сначала прочитай [карту package-рецептов](references/recipes/package/index.md), затем документ выбранного сценария.
 
-- React + Vite: [index](references/recipes/react-vite/index.md);
-- Next.js App Router: [index](references/recipes/nextjs/index.md);
-- TanStack Query или SWR: соответствующий recipe внутри framework directory;
-- browser JWT/cookie, refresh token, uploads, retry и cancellation: соответствующий React recipe;
-- SSR cookie auth: [Next.js SSR recipe](references/recipes/nextjs/ssr-cookie-auth.md);
-- generated package с исправлениями: [package recipe](references/recipes/package/generated-with-corrections.md);
-- generation drift в CI: [CI recipe](references/recipes/package/generation-ci.md).
+SDK публикует compiled `dist`, а не raw TypeScript. Для ESM package используй NodeNext, declarations и явное поле `exports`.
 
-Не добавляй framework adapter, cache layer или hooks, если пользователь их не запросил: package их не генерирует.
+Минимальные публичные точки входа:
 
-## Проверка результата
+- root;
+- `./http-client`;
+- `./create-api-client`;
+- `./operations`;
+- `./operations/*`;
+- `./operations-tree`;
+- `./data-contracts`, если пакет публично поддерживает этот subpath.
 
-Считай работу завершённой после релевантных проверок:
+Прямые operation subpaths являются частью package contract. Не обещай tree-shaking barrel-импортов как гарантированное поведение.
 
-1. Generated или ручной код проходит strict TypeScript typecheck.
-2. Реальный consumer проходит production build.
-3. Operation tests проверяют wire metadata и error path.
-4. Workspace package собирается до consumers, а public imports работают из `dist` через `exports`.
-5. Повторная generation не удаляет ручные файлы, потому что они находятся вне output.
-6. Generated diff просмотрен, включая удалённые и новые untracked files.
-7. Auth, retry и SSR решения не создают утечки credentials или cross-request state.
+Не помещай configured singleton, app URL или credentials внутрь общего SDK. Каждое приложение создаёт собственный transport и нужный API client.
 
-Используй существующие project commands. Для repository самого `rest-api-codegen` основной gate — `npm run verify`.
+## Порядок работы
 
-В финальном ответе кратко укажи выбранную ветку, созданные package/API boundaries, выполненные проверки и оставшиеся данные contract, если они действительно отсутствуют.
+1. Исследуй проект и существующие соглашения.
+2. Определи источник операций, topology, runtime, auth и необходимый размер клиента.
+3. Кратко объясни пользователю только существенный архитектурный выбор.
+4. Сгенерируй клиент либо создай manual operations.
+5. Настрой transport и собери нужные API clients.
+6. Подключи клиент к реальному месту использования.
+7. Прочитай фактические типы и исправь integration errors.
+8. Запусти принятые в проекте typecheck, tests или build, если пользователь не запретил проверки.
+9. Сообщи выполненные изменения, проверки и оставшиеся ограничения.
+
+Не останавливайся на рекомендации, если пользователь запросил реализацию и необходимые данные доступны.
+
+## Запрещённые решения
+
+- Не редактируй generated-файлы.
+- Не складывай ручные файлы внутрь generated output.
+- Не создавай дублирующий REST-клиент, если проект уже использует общий SDK.
+- Не создавай npm SDK и не публикуй его без согласия пользователя.
+- Не создавай новую инфраструктурную структуру, не изучив существующую.
+- Не смешивай browser-only и server-only clients через общий barrel.
+- Не храни cookie пользователя в mutable global transport state.
+- Не придумывай response types, operation names и API arguments.
+- Не добавляй framework hooks в generated-код.
+- Не пересказывай документацию вместо выполнения задачи.
+
+## Карта документации
+
+```text
+references/
+├── FEATURES.md
+├── cli.md
+├── http-client.md
+├── recipes/
+│   ├── index.md
+│   ├── react/
+│   │   ├── index.md
+│   │   ├── full-client.md
+│   │   ├── manual-client.md
+│   │   ├── broken-endpoints.md
+│   │   ├── swr.md
+│   │   ├── cookie-auth.md
+│   │   ├── jwt-local-storage.md
+│   │   ├── refresh-token.md
+│   │   ├── retry.md
+│   │   └── file-upload.md
+│   ├── nextjs/
+│   │   ├── index.md
+│   │   ├── partial-client.md
+│   │   └── ssr-cookie-auth.md
+│   └── package/
+│       ├── index.md
+│       ├── monorepo-package.md
+│       ├── npm-package.md
+│       └── generated-with-corrections.md
+└── maintainers/
+    ├── index.md
+    ├── architecture.md
+    └── testing.md
+```
+
+Выбор references:
+
+| Задача | Документы |
+| --- | --- |
+| Понять возможности продукта | [Возможности](references/FEATURES.md) |
+| Сгенерировать клиент и изучить output | [CLI](references/cli.md) |
+| Настроить transport, hooks, errors и cancellation | [`HttpClient`](references/http-client.md) |
+| Полный клиент в SPA | [Полный React-клиент](references/recipes/react/full-client.md) |
+| Клиент без OpenAPI | [Ручной клиент](references/recipes/react/manual-client.md) |
+| Исправить generated-операцию в приложении | [Исправление операции](references/recipes/react/broken-endpoints.md) |
+| Добавить SWR | [SWR](references/recipes/react/swr.md) |
+| Настроить cookie в browser | [Cookie-аутентификация](references/recipes/react/cookie-auth.md) |
+| Настроить JWT или refresh token | [JWT](references/recipes/react/jwt-local-storage.md) и [refresh token](references/recipes/react/refresh-token.md) |
+| Настроить retry или upload | [Retry](references/recipes/react/retry.md) или [upload](references/recipes/react/file-upload.md) |
+| Разделить операции по Next.js pages | [Page clients](references/recipes/nextjs/partial-client.md) |
+| Настроить cookie в browser и SSR Next.js | [Next.js cookie](references/recipes/nextjs/ssr-cookie-auth.md) |
+| Создать workspace SDK | [SDK в монорепозитории](references/recipes/package/monorepo-package.md) |
+| Создать npm SDK | [npm SDK](references/recipes/package/npm-package.md) |
+| Добавить overrides в SDK | [Overrides SDK](references/recipes/package/generated-with-corrections.md) |
+| Работать над самим rest-api-codegen | [Материалы для сопровождающих](references/maintainers/index.md) |
+
+## Критерии завершения
+
+Работа завершена, когда:
+
+- выбранная структура соответствует repository и числу consumers;
+- generated output изолирован от ручного кода;
+- используется правильный источник операций;
+- transport настроен для фактического runtime и auth;
+- приложение импортирует только нужный клиент или операции;
+- server-only код не попадает в browser module graph;
+- manual и overridden contracts основаны на реальных данных;
+- существующие проверки проекта проходят либо пользователь явно отказался от их запуска;
+- пользователь получил рабочий код, а не только ссылки на документацию.

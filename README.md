@@ -67,7 +67,31 @@ const pet = await petStoreApi.pets.getPet({ id: "42" });
 
 ## Документация
 
-[CLI](./docs/ru/cli.md) · [`HttpClient`](./docs/ru/http-client.md) · [Рецепты](./docs/ru/recipes/index.md) · [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
+- [Возможности](./docs/ru/FEATURES.md)
+- [CLI и структура generated-клиента](./docs/ru/cli.md)
+- [`HttpClient`](./docs/ru/http-client.md)
+- [Рецепты](./docs/ru/recipes/index.md)
+  - [React](./docs/ru/recipes/react/index.md)
+    - [Полный API-клиент](./docs/ru/recipes/react/full-client.md)
+    - [Ручной клиент без OpenAPI](./docs/ru/recipes/react/manual-client.md)
+    - [Исправление generated-операции](./docs/ru/recipes/react/broken-endpoints.md)
+    - [SWR](./docs/ru/recipes/react/swr.md)
+    - [Cookie-аутентификация](./docs/ru/recipes/react/cookie-auth.md)
+    - [JWT из `localStorage`](./docs/ru/recipes/react/jwt-local-storage.md)
+    - [Обновление токена](./docs/ru/recipes/react/refresh-token.md)
+    - [Повтор запроса](./docs/ru/recipes/react/retry.md)
+    - [Загрузка файла](./docs/ru/recipes/react/file-upload.md)
+  - [Next.js App Router](./docs/ru/recipes/nextjs/index.md)
+    - [Отдельный API-клиент для каждой страницы](./docs/ru/recipes/nextjs/partial-client.md)
+    - [Cookie-аутентификация в browser и SSR](./docs/ru/recipes/nextjs/ssr-cookie-auth.md)
+  - [SDK-пакеты](./docs/ru/recipes/package/index.md)
+    - [Workspace SDK в монорепозитории](./docs/ru/recipes/package/monorepo-package.md)
+    - [Отдельный npm SDK](./docs/ru/recipes/package/npm-package.md)
+    - [Исправление операции внутри SDK](./docs/ru/recipes/package/generated-with-corrections.md)
+- [Разработка и сопровождение](./docs/ru/maintainers/index.md)
+  - [Архитектура проекта](./docs/ru/maintainers/architecture.md)
+  - [Тестирование проекта](./docs/ru/maintainers/testing.md)
+- [npm](https://www.npmjs.com/package/@gromlab/rest-api-codegen)
 
 ## Лицензия
 

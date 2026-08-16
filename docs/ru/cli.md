@@ -7,7 +7,7 @@ CLI читает OpenAPI-спецификацию и записывает сге
 Основной способ запуска - `npx` с явно указанной версией:
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.3 \
+npx --yes @gromlab/rest-api-codegen@5.2.4 \
   --input <openapi.json-or-url> \
   --output <directory>
 ```

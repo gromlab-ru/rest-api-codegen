@@ -23,7 +23,7 @@ pet-store-rest-sdk/
 ```json
 {
   "scripts": {
-    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.3 --input ./openapi/pet-store.openapi.json --output ./src/generated"
+    "generate": "npx --yes @gromlab/rest-api-codegen@5.2.4 --input ./openapi/pet-store.openapi.json --output ./src/generated"
   }
 }
 ```

@@ -6,7 +6,7 @@ compatibility: "OpenCode и Agent Skills-compatible агенты; для CLI т�
 metadata:
   language: "ru"
   package: "@gromlab/rest-api-codegen"
-  package-version: "5.2.3"
+  package-version: "5.2.4"
 ---
 
 # REST API Codegen
@@ -123,7 +123,7 @@ SDK хранит типы, операции, `HttpClient`, `createApiClient`, `o
 Поддерживаемая команда содержит только input и output:
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.3 \
+npx --yes @gromlab/rest-api-codegen@5.2.4 \
   --input <openapi.json-or-url> \
   --output <generated-directory>
 ```

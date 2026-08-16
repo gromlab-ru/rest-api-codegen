@@ -26,7 +26,7 @@ npx skills add gromlab-ru/rest-api-codegen
 ## Генерация
 
 ```bash
-npx --yes @gromlab/rest-api-codegen@5.2.3 \
+npx --yes @gromlab/rest-api-codegen@5.2.4 \
   --input https://petstore.swagger.io/v2/swagger.json \
   --output ./src/infra/pet-store-api/generated
 ```

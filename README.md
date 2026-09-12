@@ -23,6 +23,22 @@
 npx skills add gromlab-ru/rest-api-codegen
 ```
 
+### Разработка skill
+
+Исходник хранится в `src/skills/rest-api-codegen-ru/SKILL.source.md`, настройки сборки — в соседнем `skill.config.mjs`. Сборка создаёт `skills/rest-api-codegen-ru/SKILL.md` и копирует `docs/ru/` в `references/` готового skill.
+
+Имя `SKILL.md` зарезервировано для готовых skills в `skills/<имя>/`. Исходные заготовки называются `SKILL.source.md`, чтобы `npx skills update` не находил несколько skills с одинаковым `name`.
+
+После изменения исходника или документации выполни:
+
+```bash
+npm run build:skills
+npm run check:skills
+npm run test:skills
+```
+
+`check:skills` проверяет всё Git-дерево и новые неигнорируемые файлы: расположение точек входа, корректность YAML-frontmatter, уникальность имён и соответствие имени каталогу. Затем без перезаписи файлов сравнивает состав и содержимое готовых skills с исходниками. Проверка входит в `verify`, CI, выпуск и упаковку пакета. Готовые файлы в `skills/` создаются сборщиком.
+
 ## Генерация
 
 ```bash

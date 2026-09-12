@@ -30,6 +30,8 @@
   "scripts": {
     "build": "npm run clean && tsc -p tsconfig.build.json && node scripts/copy-templates.mjs",
     "build:skills": "node src/skills/registry.mjs --build",
+    "check:skills": "node scripts/check-skills.mjs && node src/skills/registry.mjs --check",
+    "test:skills": "node --test tests/skills*.test.mjs",
     "clean": "node scripts/clean.mjs",
     "dev": "npm run build && node dist/cli.js",
     "start": "node dist/cli.js",
@@ -39,8 +41,8 @@
     "test:watch": "npm run build && vitest",
     "test:coverage": "npm run build && vitest run --coverage",
     "prepare:package": "npm run typecheck && npm run build",
-    "verify": "npm run test:release && npm run typecheck && npm run test:coverage",
-    "prepack": "npm run prepare:package"
+    "verify": "npm run check:skills && npm run test:skills && npm run test:release && npm run typecheck && npm run test:coverage",
+    "prepack": "npm run check:skills && npm run prepare:package"
   },
   "dependencies": {
     "@biomejs/js-api": "6.0.0",
@@ -54,7 +56,8 @@
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^4.1.10",
     "typescript": "^5",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "2.9.0"
   },
   "keywords": [
     "openapi",
